@@ -4,6 +4,25 @@
 #include <QString>
 #include <QStringList>
 #include <gmpxx.h>
+#include <QGraphicsItem>
+
+class Object
+{
+public:
+    Object();
+    virtual QGraphicsItem* getGraphicsItem() const;
+};
+
+class Line : public Object
+{
+public:
+    Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, int aperture );
+    virtual QGraphicsItem* getGraphicsItem() const;
+
+protected:
+    mpq_class m_x1, m_y1, m_x2, m_y2;
+    int m_aperture;
+};
 
 class Layer
 {
@@ -33,12 +52,14 @@ public:
     void setY( mpq_class y ) {m_current_y = y;}
     mpq_class y() const {return m_current_y;}
 
+    QList<Object*> getObjects() const {return m_objects;}
+
 protected:
     mpq_class m_current_x;
     mpq_class m_current_y;
     ImagePolarity m_imagePolarity;
     QString m_name;
-    QList<bool> m_objects;
+    QList<Object*> m_objects;
     InterpolationMode m_interpolationMode;
     DrawMode m_drawMode;
     int m_aperture;
@@ -50,6 +71,7 @@ public:
     GerberImporter();
 
     bool import( QString filename );
+    QList<Layer>& getLayers() {return m_layers;}
 
 protected:
     bool processDataBlock( QString dataBlock );

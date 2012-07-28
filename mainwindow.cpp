@@ -23,4 +23,20 @@ void MainWindow::on_actionImport_Gerber_triggered()
     QString filename = QFileDialog::getOpenFileName( this, "Select gerber file to import" );
 
     bool ok = importer.import( filename );
+    if (!ok)
+        return;
+
+    QGraphicsScene* scene = new QGraphicsScene;
+
+    ui->tabWidget->setCurrentIndex(1);
+    QList<Layer> layers = importer.getLayers();
+    foreach (Layer layer, layers) {
+        QList<Object*> objects = layer.getObjects();
+        foreach (Object* object, objects) {
+            scene->addItem( object->getGraphicsItem() );
+        }
+    }
+
+    ui->graphicsView->setScene(scene);
+    ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
 }

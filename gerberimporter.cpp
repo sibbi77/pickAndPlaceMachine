@@ -247,15 +247,17 @@ void GerberImporter::draw( QString dataBlock )
     int pos = 0;
     if (dataBlock.at(pos) == 'X') {
         QString x_str;
-        while (dataBlock.at(++pos).isDigit()) {
-            x_str += dataBlock.at(pos);
+        pos++;
+        while (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+')) {
+            x_str += dataBlock.at(pos++);
         }
         x = makeCoordinate( x_str );
     }
     if (dataBlock.at(pos) == 'Y') {
         QString y_str;
-        while (dataBlock.at(++pos).isDigit()) {
-            y_str += dataBlock.at(pos);
+        pos++;
+        while (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+')) {
+            y_str += dataBlock.at(pos++);
         }
         y = makeCoordinate( y_str );
     }
@@ -279,6 +281,8 @@ void GerberImporter::setDCode( QString dataBlock )
             currentLayer().setDrawMode( Layer::on );
         else if (temp == 2)
             currentLayer().setDrawMode( Layer::off );
+        else if (temp == 3)
+            currentLayer().setDrawMode( Layer::flash );
         else if (temp < 10)
             qDebug() << "Invalid D Code.";
         else
@@ -290,14 +294,21 @@ void GerberImporter::setDCode( QString dataBlock )
 
 mpq_class GerberImporter::makeCoordinate( QString str )
 {
+    if (str.isEmpty()) {
+        qDebug() << "makeCoordinate(): not a valid coordinate: <empty>";
+        return 0;
+    }
+
     int num = m_FS_integer + m_FS_decimals;
 
-    if (str.length() < num) {
-        if (m_FS_zero == omit_leading)
-            str.prepend( QString(num - str.length(),'0') );
-        else
-            str.append( QString(num - str.length(),'0') );
-    } else if (str.length() > num) {
+    int digit_length = str.length();
+    if (str.at(0) == '-' || str.at(0) == '+')
+        digit_length--;
+
+    if (digit_length < num) {
+        if (m_FS_zero == omit_trailing)
+            str.append( QString(num - digit_length,'0') );
+    } else if (digit_length > num) {
         qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
         return 0;
     }
@@ -346,4 +357,47 @@ Layer::~Layer()
 void Layer::draw( mpq_class x, mpq_class y )
 {
     qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d();
+
+    if (m_drawMode == on) {
+        // assume linear interpolation with filling off
+        Line* line = new Line( m_current_x, m_current_y, x, y, m_aperture );
+        m_objects << line;
+    }
+
+    m_current_x = x;
+    m_current_y = y;
+}
+
+
+
+
+
+
+
+Object::Object()
+{
+}
+
+QGraphicsItem* Object::getGraphicsItem() const
+{
+    return 0;
+}
+
+Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, int aperture )
+{
+    m_x1 = x1;
+    m_y1 = y1;
+    m_x2 = x2;
+    m_y2 = y2;
+    m_aperture = aperture;
+}
+
+QGraphicsItem* Line::getGraphicsItem() const
+{
+    qreal x1 = m_x1.get_d();
+    qreal y1 = m_y1.get_d();
+    qreal x2 = m_x2.get_d();
+    qreal y2 = m_y2.get_d();
+    QGraphicsLineItem* line = new QGraphicsLineItem(x1,y1,x2,y2);
+    return line;
 }
