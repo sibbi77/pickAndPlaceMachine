@@ -11,6 +11,7 @@ GerberImporter::GerberImporter()
 
     m_FS_integer = -1;
     m_FS_decimals = -1;
+    m_FS_decimals10 = 0;
     m_FS_zero = omit_leading;
     m_MO = in;
 }
@@ -66,6 +67,18 @@ bool GerberImporter::processDataBlock( QString dataBlock )
         return false; // end of file
     else if (dataBlock.left(3) == "G04")
         qDebug() << "Comment:" << dataBlock.mid(3,dataBlock.length()-4);
+    else if (dataBlock.left(3) == "G01")
+        drawG01( dataBlock );
+    else if (dataBlock.left(3) == "G02")
+        drawG02( dataBlock );
+    else if (dataBlock.left(3) == "G03")
+        drawG03( dataBlock );
+    else if (dataBlock.left(1) == "D")
+        setDCode( dataBlock );
+    else if (dataBlock.left(4) == "G54D")
+        setDCode( dataBlock.mid(3) );
+    else if ((dataBlock.left(1) == "X") || (dataBlock.left(1) == "Y"))
+        draw( dataBlock );
 
     return true; // go on with processing
 }
@@ -131,8 +144,10 @@ void GerberImporter::parameterFS( QString parameterBlock )
         if (ok)
             m_FS_integer = temp;
         temp = parameterBlock.mid(++pos,1).toInt(&ok);
-        if (ok)
+        if (ok) {
             m_FS_decimals = temp;
+            m_FS_decimals10 = pow(10,m_FS_decimals); // speed up later calculation of coordinates
+        }
         pos++;
     } else {
         qDebug() << "FS error";
@@ -195,10 +210,109 @@ Layer& GerberImporter::currentLayer()
     return m_layers.last();
 }
 
+//! \brief Draw linear interpolation.
+void GerberImporter::drawG01( QString dataBlock )
+{
+    dataBlock.remove(0,3); // remove G01
+    currentLayer().setInterpolationMode( Layer::linear );
+    draw( dataBlock );
+}
 
+//! \brief Draw clockwise circular interpolation.
+void GerberImporter::drawG02( QString dataBlock )
+{
+    dataBlock.remove(0,3); // remove G02
+    currentLayer().setInterpolationMode( Layer::clockwise );
+    draw( dataBlock );
+}
 
+//! \brief Draw counter clockwise circular interpolation.
+void GerberImporter::drawG03( QString dataBlock )
+{
+    dataBlock.remove(0,3); // remove G03
+    currentLayer().setInterpolationMode( Layer::counterclockwise );
+    draw( dataBlock );
+}
 
+//! \brief Draw s.th..
+void GerberImporter::draw( QString dataBlock )
+{
+//    DrawMode drawMode = m_drawMode;
+//    int aperture = m_currentAperture;
+//    InterpolationMode interpolationMode = m_interpolationMode;
 
+    mpq_class x = currentLayer().x();
+    mpq_class y = currentLayer().y();
+
+    int pos = 0;
+    if (dataBlock.at(pos) == 'X') {
+        QString x_str;
+        while (dataBlock.at(++pos).isDigit()) {
+            x_str += dataBlock.at(pos);
+        }
+        x = makeCoordinate( x_str );
+    }
+    if (dataBlock.at(pos) == 'Y') {
+        QString y_str;
+        while (dataBlock.at(++pos).isDigit()) {
+            y_str += dataBlock.at(pos);
+        }
+        y = makeCoordinate( y_str );
+    }
+
+    if (dataBlock.at(pos) == 'D') {
+        // parse D code
+        setDCode( dataBlock.mid(pos) );
+    }
+
+    currentLayer().draw(x,y);
+}
+
+void GerberImporter::setDCode( QString dataBlock )
+{
+    dataBlock.remove(0,1); // strip 'D'
+    dataBlock.chop(1); // strip '*'
+    bool ok;
+    int temp = dataBlock.toInt(&ok);
+    if (ok) {
+        if (temp == 1)
+            currentLayer().setDrawMode( Layer::on );
+        else if (temp == 2)
+            currentLayer().setDrawMode( Layer::off );
+        else if (temp < 10)
+            qDebug() << "Invalid D Code.";
+        else
+            currentLayer().setAperture( temp );
+    } else {
+        qDebug() << "Error in D Code.";
+    }
+}
+
+mpq_class GerberImporter::makeCoordinate( QString str )
+{
+    int num = m_FS_integer + m_FS_decimals;
+
+    if (str.length() < num) {
+        if (m_FS_zero == omit_leading)
+            str.prepend( QString(num - str.length(),'0') );
+        else
+            str.append( QString(num - str.length(),'0') );
+    } else if (str.length() > num) {
+        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+        return 0;
+    }
+
+    bool ok;
+    int temp = str.toInt(&ok);
+    if (!ok) {
+        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+        return 0;
+    }
+
+    mpq_class value(temp,m_FS_decimals10);
+    value.canonicalize();
+    return value;
+}
 
 
 
@@ -219,9 +333,17 @@ Layer::Layer()
     m_current_y = 0;
     m_imagePolarity = positive;
 
+    m_drawMode = off;
+    m_aperture = 0;
+    m_interpolationMode = linear;
 }
 
 Layer::~Layer()
 {
 
+}
+
+void Layer::draw( mpq_class x, mpq_class y )
+{
+    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d();
 }
