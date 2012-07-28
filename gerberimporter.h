@@ -6,6 +6,12 @@
 #include <gmpxx.h>
 #include <QGraphicsItem>
 
+class Aperture
+{
+public:
+    Aperture();
+};
+
 class Object
 {
 public:
@@ -32,7 +38,7 @@ public:
     enum InterpolationMode {linear,clockwise,counterclockwise};
 
 public:
-    Layer();
+    Layer( QHash<int,Aperture> apertures );
     ~Layer();
 
     void setImagePolarity( ImagePolarity p ) {m_imagePolarity = p;}
@@ -51,6 +57,7 @@ public:
     mpq_class x() const {return m_current_x;}
     void setY( mpq_class y ) {m_current_y = y;}
     mpq_class y() const {return m_current_y;}
+    void defineAperture( int num, Aperture aperture );
 
     QList<Object*> getObjects() const {return m_objects;}
 
@@ -63,6 +70,8 @@ protected:
     InterpolationMode m_interpolationMode;
     DrawMode m_drawMode;
     int m_aperture;
+
+    QHash<int,Aperture> m_apertures; //!< Layer specific apertures
 };
 
 class GerberImporter
@@ -79,6 +88,7 @@ protected:
     void parameterFS( QString parameterBlock );
     void parameterMO( QString parameterBlock );
     void parameterLN( QString parameterBlock );
+    void parameterAD( QString parameterBlock );
     void drawG01( QString dataBlock );
     void drawG02( QString dataBlock );
     void drawG03( QString dataBlock );
@@ -92,6 +102,7 @@ protected:
     QStringList m_deprecated_parameters;
 
     QList<Layer> m_layers;
+    QHash<int,Aperture> m_apertures; //!< global defined apertures; available to all layers
 
     // current graphics state
     int m_FS_integer, m_FS_decimals, m_FS_decimals10;

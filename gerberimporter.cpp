@@ -102,6 +102,8 @@ void GerberImporter::processParameterBlock( QString parameterBlock )
         parameterMO( parameterBlock );
     else if (parameterBlock.left(2) == "LN")
         parameterLN( parameterBlock );
+    else if (parameterBlock.left(3) == "ADD")
+        parameterAD( parameterBlock );
 }
 
 //! \brief Define the number format.
@@ -192,12 +194,54 @@ void GerberImporter::parameterLN( QString parameterBlock )
     qDebug() << "The layer's name is:" << newLayer().name();
 }
 
+//! \brief Define an aperture.
+void GerberImporter::parameterAD( QString parameterBlock )
+{
+    parameterBlock.remove(0,3); // remove "ADD"
+    QString num_str;
+    int pos = 0;
+    while ((pos < parameterBlock.length()) && (parameterBlock.at(pos).isDigit()))
+        num_str += parameterBlock.at(pos++);
+
+    bool ok;
+    int num = num_str.toInt(&ok);
+    if (!ok || (num<10) || (num>999)) {
+        qDebug() << "invalid aperture definition";
+        return;
+    }
+
+    QString aperture_str = parameterBlock.mid(pos);
+    aperture_str.chop(1); // remove '*'
+
+    Aperture aperture;
+
+    if (aperture_str.left(2) == "C,") {
+        // circular aperture
+    } else if (aperture_str.left(2) == "R,") {
+        // rectangular aperture
+    } else if (aperture_str.left(2) == "O,") {
+        // oval aperture
+    } else if (aperture_str.left(2) == "P,") {
+        // polygon aperture
+    } else {
+        // custom macro
+    }
+
+    if (m_layers.isEmpty()) {
+        // this is a global aperture
+        m_apertures[num] = aperture;
+    } else {
+        // this is a layer local aperture
+        currentLayer().defineAperture( num, aperture );
+    }
+}
+
 Layer& GerberImporter::newLayer()
 {
     if (m_layers.isEmpty())
-        m_layers << Layer();
+        m_layers << Layer( m_apertures );
     if (!m_layers.last().isEmpty())
-        m_layers << Layer();
+        m_layers << Layer( m_apertures );
 
     return m_layers.last();
 }
@@ -205,7 +249,7 @@ Layer& GerberImporter::newLayer()
 Layer& GerberImporter::currentLayer()
 {
     if (m_layers.isEmpty())
-        m_layers << Layer();
+        m_layers << Layer( m_apertures );
 
     return m_layers.last();
 }
@@ -237,32 +281,31 @@ void GerberImporter::drawG03( QString dataBlock )
 //! \brief Draw s.th..
 void GerberImporter::draw( QString dataBlock )
 {
-//    DrawMode drawMode = m_drawMode;
-//    int aperture = m_currentAperture;
-//    InterpolationMode interpolationMode = m_interpolationMode;
+    if (dataBlock.isEmpty())
+        return;
 
     mpq_class x = currentLayer().x();
     mpq_class y = currentLayer().y();
 
     int pos = 0;
-    if (dataBlock.at(pos) == 'X') {
+    if (pos < dataBlock.length() && dataBlock.at(pos) == 'X') {
         QString x_str;
         pos++;
-        while (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+')) {
+        while (pos < dataBlock.length() && (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+'))) {
             x_str += dataBlock.at(pos++);
         }
         x = makeCoordinate( x_str );
     }
-    if (dataBlock.at(pos) == 'Y') {
+    if (pos < dataBlock.length() && dataBlock.at(pos) == 'Y') {
         QString y_str;
         pos++;
-        while (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+')) {
+        while (pos < dataBlock.length() && (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+'))) {
             y_str += dataBlock.at(pos++);
         }
         y = makeCoordinate( y_str );
     }
 
-    if (dataBlock.at(pos) == 'D') {
+    if (pos < dataBlock.length() && dataBlock.at(pos) == 'D') {
         // parse D code
         setDCode( dataBlock.mid(pos) );
     }
@@ -338,7 +381,7 @@ mpq_class GerberImporter::makeCoordinate( QString str )
 
 
 
-Layer::Layer()
+Layer::Layer(QHash<int,Aperture> apertures)
 {
     m_current_x = 0;
     m_current_y = 0;
@@ -347,6 +390,8 @@ Layer::Layer()
     m_drawMode = off;
     m_aperture = 0;
     m_interpolationMode = linear;
+
+    m_apertures = apertures;
 }
 
 Layer::~Layer()
@@ -368,6 +413,10 @@ void Layer::draw( mpq_class x, mpq_class y )
     m_current_y = y;
 }
 
+void Layer::defineAperture( int num, Aperture aperture )
+{
+    m_apertures[num] = aperture;
+}
 
 
 
@@ -400,4 +449,15 @@ QGraphicsItem* Line::getGraphicsItem() const
     qreal y2 = m_y2.get_d();
     QGraphicsLineItem* line = new QGraphicsLineItem(x1,y1,x2,y2);
     return line;
+}
+
+
+
+
+
+
+
+Aperture::Aperture()
+{
+
 }
