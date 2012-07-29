@@ -1,6 +1,7 @@
 #include "gerberimporter.h"
 
 #include <QtCore>
+#include <QtGui>
 
 GerberImporter::GerberImporter()
 {
@@ -37,7 +38,7 @@ bool GerberImporter::import( QString filename )
                 if (processDataBlock( block ) == false)
                     return true;
             } else
-                processParameterBlock( block );
+                processParameterBlock( block, false );
             continue;
         }
         if (idx1 != -1) {
@@ -45,8 +46,11 @@ bool GerberImporter::import( QString filename )
             line.remove( 0, idx1+1 ); // remove garbage
             if (state == dataBlock)
                 state = parameterBlock;
-            else
+            else {
+                // end of parameter block
+                processParameterBlock( QString(), true ); // notify processParameterBlock() of end of block
                 state = dataBlock;
+            }
             continue;
         }
         QString temp = stream.readLine();
@@ -61,7 +65,7 @@ bool GerberImporter::import( QString filename )
 bool GerberImporter::processDataBlock( QString dataBlock )
 {
     dataBlock = dataBlock.trimmed();
-    qDebug() << "dataBlock:" << dataBlock;
+//    qDebug() << "dataBlock:" << dataBlock;
 
     if (dataBlock.left(3) == "M02")
         return false; // end of file
@@ -83,10 +87,30 @@ bool GerberImporter::processDataBlock( QString dataBlock )
     return true; // go on with processing
 }
 
-void GerberImporter::processParameterBlock( QString parameterBlock )
+//! \brief
+void GerberImporter::processParameterBlock( QString parameterBlock, bool finished )
 {
+    static QString collect_parameter_AM;
+
+    if (!collect_parameter_AM.isEmpty()) {
+        // what a pitty!
+        // the pieces of the AM parameter are delimited by '*'
+        // this leads to multiple invokations of this (processParameterBlock) function
+        // we need to collect all these pieces
+        if (!finished) {
+            collect_parameter_AM += parameterBlock;
+            return;
+        } else {
+            // the parameter block is finished
+            collect_parameter_AM += parameterBlock;
+            parameterAM( collect_parameter_AM );
+            collect_parameter_AM.clear();
+            return;
+        }
+    }
+
     parameterBlock = parameterBlock.trimmed();
-    qDebug() << "parameterBlock:" << parameterBlock;
+//    qDebug() << "parameterBlock:" << parameterBlock;
 
     //parameterBlock = parameterBlock.left(2).toUpper() + parameterBlock.remove(0,2);
     parameterBlock = parameterBlock.toUpper();
@@ -104,6 +128,13 @@ void GerberImporter::processParameterBlock( QString parameterBlock )
         parameterLN( parameterBlock );
     else if (parameterBlock.left(3) == "ADD")
         parameterAD( parameterBlock );
+    else if (parameterBlock.left(2) == "AM") {
+        // what a pitty!
+        // the pieces of the AM parameter are delimited by '*'
+        // this leads to multiple invokations of this (processParameterBlock) function
+        // we need to collect all these pieces
+        collect_parameter_AM = parameterBlock;
+    }
 }
 
 //! \brief Define the number format.
@@ -200,7 +231,7 @@ void GerberImporter::parameterAD( QString parameterBlock )
     parameterBlock.remove(0,3); // remove "ADD"
     QString num_str;
     int pos = 0;
-    while ((pos < parameterBlock.length()) && (parameterBlock.at(pos).isDigit()))
+    while ((pos < parameterBlock.length()) && parameterBlock.at(pos).isDigit())
         num_str += parameterBlock.at(pos++);
 
     bool ok;
@@ -214,9 +245,33 @@ void GerberImporter::parameterAD( QString parameterBlock )
     aperture_str.chop(1); // remove '*'
 
     Aperture aperture;
+    QList<mpq_class> arguments;
+
+    pos = aperture_str.indexOf(',');
+    if (pos != -1) {
+        // parse arguments
+        pos++;
+        while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.')) {
+            QString argument_str;
+            while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.')) {
+                argument_str += aperture_str.at(pos++);
+            }
+            mpq_class temp = mpq_from_decimal_string( argument_str );
+            arguments << temp;
+            qDebug() << "argument:" << temp.get_d();
+            if (pos < aperture_str.length() && aperture_str.at(pos) == 'X')
+                pos++; // next argument
+        }
+    }
 
     if (aperture_str.left(2) == "C,") {
         // circular aperture
+        if (arguments.size() == 1)
+            aperture.setCircle( arguments.at(0) );
+        else if (arguments.size() == 2)
+            aperture.setCircle( arguments.at(0), arguments.at(1) );
+        else if (arguments.size() == 3)
+            aperture.setCircle( arguments.at(0), arguments.at(1), arguments.at(2) );
     } else if (aperture_str.left(2) == "R,") {
         // rectangular aperture
     } else if (aperture_str.left(2) == "O,") {
@@ -225,6 +280,18 @@ void GerberImporter::parameterAD( QString parameterBlock )
         // polygon aperture
     } else {
         // custom macro
+        int idx = aperture_str.indexOf(',');
+        if (idx == -1) {
+            // no ',' found
+            idx = aperture_str.length();
+        }
+        QString macroName = aperture_str.left(idx);
+        if (!m_apertureMacros.contains(macroName)) {
+            // cannot use this aperture; macro invalid
+            qDebug() << "AD command: cannot use macro" << macroName;
+            return;
+        }
+        aperture.setMacro( m_apertureMacros[macroName], arguments );
     }
 
     if (m_layers.isEmpty()) {
@@ -234,6 +301,36 @@ void GerberImporter::parameterAD( QString parameterBlock )
         // this is a layer local aperture
         currentLayer().defineAperture( num, aperture );
     }
+}
+
+void GerberImporter::parameterAM( QString collect_parameter_AM )
+{
+    qDebug() << "macro:" << collect_parameter_AM;
+
+    collect_parameter_AM = collect_parameter_AM.trimmed();
+
+    // extract macro name
+    int idx = collect_parameter_AM.indexOf('*');
+    if (idx == -1) {
+        qDebug() << "invalid macro";
+        return;
+    }
+    QString macroName = collect_parameter_AM.mid(2,idx-2);
+    collect_parameter_AM.remove(0,idx+1); // remove "AM" + macroName + "*"
+
+    QStringList primitives;
+    while (!collect_parameter_AM.isEmpty()) {
+        // iterate over all primitives
+        QString primitive;
+        int pos = 0;
+        while (pos < collect_parameter_AM.length() && collect_parameter_AM.at(pos) != '*')
+            primitive += collect_parameter_AM.at(pos++);
+        collect_parameter_AM.remove(0,pos+1);
+        primitives << primitive;
+    }
+
+    ApertureMacro macro( primitives );
+    m_apertureMacros[macroName] = macro;
 }
 
 Layer& GerberImporter::newLayer()
@@ -368,7 +465,44 @@ mpq_class GerberImporter::makeCoordinate( QString str )
     return value;
 }
 
+mpq_class GerberImporter::mpq_from_decimal_string( QString decimal_str )
+{
+    decimal_str = decimal_str.trimmed();
+    if (decimal_str.isEmpty())
+        return 0;
 
+    QString digits;
+    if (decimal_str.at(0) == '-' || decimal_str.at(0) == '+') {
+        digits = decimal_str.at(0);
+        decimal_str.remove(0,1); // remove sign
+    }
+
+    int decimal_point = -1;
+    int pos = 0;
+    while (pos < decimal_str.length() && (decimal_str.at(pos).isDigit() || decimal_str.at(pos) == '.')) {
+        if (decimal_str.at(pos) == '.') {
+            decimal_point = pos++;
+            continue;
+        }
+        digits += decimal_str.at(pos++);
+    }
+
+    bool ok;
+    long value = digits.toInt(&ok);
+    if (!ok) {
+        qDebug() << "mpq_from_decimal_string(): invalid decimal string.";
+        return 0;
+    }
+
+    // evaluate decimals
+    int decimal10 = 1;
+    if (decimal_point != -1) {
+        decimal10 = pow( 10, pos - decimal_point - 1 );
+    }
+
+    mpq_class result( value, decimal10 );
+    return result;
+}
 
 
 
@@ -401,12 +535,19 @@ Layer::~Layer()
 
 void Layer::draw( mpq_class x, mpq_class y )
 {
-    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d();
+    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
 
     if (m_drawMode == on) {
         // assume linear interpolation with filling off
-        Line* line = new Line( m_current_x, m_current_y, x, y, m_aperture );
+        if (!m_apertures.contains(m_aperture)) {
+            qDebug() << "cannot draw line; undefined aperture.";
+            return;
+        }
+        Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
         m_objects << line;
+    } else if (m_drawMode == flash) {
+        Flash* flash = new Flash( x, y, m_apertures.value(m_aperture) );
+        m_objects << flash;
     }
 
     m_current_x = x;
@@ -432,7 +573,7 @@ QGraphicsItem* Object::getGraphicsItem() const
     return 0;
 }
 
-Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, int aperture )
+Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture )
 {
     m_x1 = x1;
     m_y1 = y1;
@@ -443,14 +584,36 @@ Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, int aperture
 
 QGraphicsItem* Line::getGraphicsItem() const
 {
+    QPen pen;
+    if (m_aperture.type() == Aperture::circle) {
+        pen.setWidthF( m_aperture.diameter().get_d() );
+        pen.setCapStyle( Qt::RoundCap );
+    }
     qreal x1 = m_x1.get_d();
     qreal y1 = m_y1.get_d();
     qreal x2 = m_x2.get_d();
     qreal y2 = m_y2.get_d();
     QGraphicsLineItem* line = new QGraphicsLineItem(x1,y1,x2,y2);
+    line->setPen( pen );
     return line;
 }
 
+Flash::Flash( mpq_class x, mpq_class y, Aperture aperture )
+{
+    m_x = x;
+    m_y = y;
+    m_aperture = aperture;
+}
+
+QGraphicsItem* Flash::getGraphicsItem() const
+{
+    qreal x = m_x.get_d();
+    qreal y = m_y.get_d();
+    QGraphicsItem* item = m_aperture.getGraphicsItem();
+    item->moveBy( x, y );
+    qDebug() << item->pos() << item->boundingRect();
+    return item;
+}
 
 
 
@@ -459,5 +622,112 @@ QGraphicsItem* Line::getGraphicsItem() const
 
 Aperture::Aperture()
 {
+    m_type = circle;
+    m_hole = noHole;
+}
 
+void Aperture::setCircle( mpq_class diameter, mpq_class x_hole_dimension, mpq_class y_hole_dimension )
+{
+    qDebug() << "Aperture::setCircle()" << diameter.get_d() << x_hole_dimension.get_d() << y_hole_dimension.get_d();
+
+    m_type = circle;
+    m_hole = noHole;
+    m_arguments.clear();
+    m_arguments << diameter;
+
+    if (x_hole_dimension != -1) {
+        // enable circular hole
+        m_hole = circularHole;
+        m_arguments << x_hole_dimension;
+        if (y_hole_dimension != -1) {
+            // enable rectangular hole
+            m_hole = rectangularHole;
+            m_arguments << y_hole_dimension;
+        }
+    }
+}
+
+void Aperture::setMacro( ApertureMacro apertureMacro, QList<mpq_class> arguments )
+{
+    m_type = macro;
+    m_macro = apertureMacro;
+    m_arguments = arguments;
+}
+
+QGraphicsItem* Aperture::getGraphicsItem() const
+{
+    if (type() == circle) {
+        qreal dia = diameter().get_d();
+        QGraphicsEllipseItem* circle = new QGraphicsEllipseItem(-dia/2.0,-dia/2.0,dia,dia);
+        QBrush brush( circle->pen().color() );
+        circle->setBrush( brush );
+        return circle;
+    }
+    if (type() == macro) {
+        qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
+        QGraphicsItemGroup* group = new QGraphicsItemGroup;
+
+        QList<QList<mpq_class> > primitives = m_macro.calc( m_arguments );
+        foreach (QList<mpq_class> primitive, primitives) {
+            if (primitive.value(0) == 5) {
+                // regular polygon
+
+            }
+        }
+        return group;
+    }
+
+    return 0;
+}
+
+
+
+
+ApertureMacro::ApertureMacro()
+{
+
+}
+
+ApertureMacro::ApertureMacro( QStringList primitives )
+{
+    qDebug() << "ApertureMacro:" << primitives;
+    m_primitives = primitives;
+}
+
+//! \brief substitute actual values for placeholders.
+QList<QList<mpq_class> > ApertureMacro::calc( QList<mpq_class> arguments ) const
+{
+    QList<QList<mpq_class> > entire_result;
+    foreach (QString primitive, m_primitives) {
+        QList<mpq_class> result;
+        primitive = primitive.trimmed();
+        if (primitive.startsWith('0'))
+            continue; // comment
+
+        QStringList args;
+        while (!primitive.isEmpty()) {
+            int idx = primitive.indexOf(',');
+            if (idx == -1) {
+                // last argument
+                args << primitive;
+                primitive.clear();
+            } else {
+                args << primitive.left(idx);
+                primitive.remove(0,idx+1);
+            }
+        }
+
+        for (int n=0; n<args.size(); n++)
+            result << calc_intern1( args.at(n), arguments );
+
+        entire_result << result;
+    }
+    return entire_result;
+}
+
+mpq_class ApertureMacro::calc_intern1( QString term, QList<mpq_class> arguments ) const
+{
+    mpq_class temp;
+
+    return temp;
 }

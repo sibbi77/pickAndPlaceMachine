@@ -6,10 +6,40 @@
 #include <gmpxx.h>
 #include <QGraphicsItem>
 
+class ApertureMacro
+{
+public:
+    ApertureMacro();
+    ApertureMacro( QStringList primitives );
+
+    QList<QList<mpq_class> > calc( QList<mpq_class> arguments ) const;
+
+protected:
+    QStringList m_primitives;
+
+    mpq_class calc_intern1( QString term, QList<mpq_class> arguments ) const;
+};
+
 class Aperture
 {
 public:
+    enum Type {circle,rectangle,oval,polygon,macro};
+    enum HoleType {noHole,circularHole,rectangularHole};
+
+public:
     Aperture();
+    void setCircle( mpq_class diameter, mpq_class x_hole_dimension = -1, mpq_class y_hole_dimension = -1 );
+    void setMacro( ApertureMacro macro, QList<mpq_class> arguments );
+    Type type() const {return m_type;}
+    mpq_class diameter() const {return m_arguments.value(0);}
+
+    QGraphicsItem* getGraphicsItem() const;
+
+protected:
+    Type m_type;
+    HoleType m_hole;
+    QList<mpq_class> m_arguments;
+    ApertureMacro m_macro;
 };
 
 class Object
@@ -22,12 +52,23 @@ public:
 class Line : public Object
 {
 public:
-    Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, int aperture );
+    Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture );
     virtual QGraphicsItem* getGraphicsItem() const;
 
 protected:
     mpq_class m_x1, m_y1, m_x2, m_y2;
-    int m_aperture;
+    Aperture m_aperture;
+};
+
+class Flash : public Object
+{
+public:
+    Flash( mpq_class x, mpq_class y, Aperture aperture );
+    virtual QGraphicsItem* getGraphicsItem() const;
+
+protected:
+    mpq_class m_x, m_y;
+    Aperture m_aperture;
 };
 
 class Layer
@@ -82,13 +123,16 @@ public:
     bool import( QString filename );
     QList<Layer>& getLayers() {return m_layers;}
 
+    static mpq_class mpq_from_decimal_string( QString decimal_str );
+
 protected:
     bool processDataBlock( QString dataBlock );
-    void processParameterBlock( QString parameterBlock );
+    void processParameterBlock( QString parameterBlock, bool finished );
     void parameterFS( QString parameterBlock );
     void parameterMO( QString parameterBlock );
     void parameterLN( QString parameterBlock );
     void parameterAD( QString parameterBlock );
+    void parameterAM( QString collect_parameter_AM );
     void drawG01( QString dataBlock );
     void drawG02( QString dataBlock );
     void drawG03( QString dataBlock );
@@ -103,6 +147,7 @@ protected:
 
     QList<Layer> m_layers;
     QHash<int,Aperture> m_apertures; //!< global defined apertures; available to all layers
+    QHash<QString,ApertureMacro> m_apertureMacros;
 
     // current graphics state
     int m_FS_integer, m_FS_decimals, m_FS_decimals10;
