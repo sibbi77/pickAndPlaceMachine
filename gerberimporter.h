@@ -6,6 +6,21 @@
 #include <gmpxx.h>
 #include <QGraphicsItem>
 
+//! \internal
+class ApertureMacro_internalRep
+{
+public:
+    enum Operator {value,plus,minus,mul,div};
+
+public:
+    ApertureMacro_internalRep();
+    ApertureMacro_internalRep( mpq_class value );
+    ApertureMacro_internalRep( Operator op );
+
+    mpq_class m_value;
+    Operator m_operator;
+};
+
 class ApertureMacro
 {
 public:
@@ -17,8 +32,15 @@ public:
 protected:
     QStringList m_primitives;
 
-    mpq_class calc_intern1( QString term, QList<mpq_class> arguments ) const;
+    QList<ApertureMacro_internalRep> calc_convertIntoInternalRep( QString term, QList<mpq_class> arguments ) const;
+    mpq_class calc_processInternalRep( QList<ApertureMacro_internalRep> temp ) const;
+    //mpq_class calc_intern1( QString term, QList<mpq_class> arguments ) const;
 };
+
+
+
+
+
 
 class Aperture
 {
@@ -123,7 +145,7 @@ public:
     bool import( QString filename );
     QList<Layer>& getLayers() {return m_layers;}
 
-    static mpq_class mpq_from_decimal_string( QString decimal_str );
+    static mpq_class mpq_from_decimal_string( QString decimal_str, bool *conversion_ok = 0, int *pos_after_number = 0 );
 
 protected:
     bool processDataBlock( QString dataBlock );

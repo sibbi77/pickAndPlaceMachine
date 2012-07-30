@@ -465,8 +465,11 @@ mpq_class GerberImporter::makeCoordinate( QString str )
     return value;
 }
 
-mpq_class GerberImporter::mpq_from_decimal_string( QString decimal_str )
+mpq_class GerberImporter::mpq_from_decimal_string( QString decimal_str, bool* conversion_ok, int* pos_after_number )
 {
+    if (conversion_ok)
+        *conversion_ok = false;
+
     decimal_str = decimal_str.trimmed();
     if (decimal_str.isEmpty())
         return 0;
@@ -499,6 +502,11 @@ mpq_class GerberImporter::mpq_from_decimal_string( QString decimal_str )
     if (decimal_point != -1) {
         decimal10 = pow( 10, pos - decimal_point - 1 );
     }
+
+    if (conversion_ok)
+        *conversion_ok  = true;
+    if (pos_after_number)
+        *pos_after_number = pos;
 
     mpq_class result( value, decimal10 );
     return result;
@@ -669,6 +677,9 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 
         QList<QList<mpq_class> > primitives = m_macro.calc( m_arguments );
         foreach (QList<mpq_class> primitive, primitives) {
+            qDebug() << "primitive:";
+            for (int n=0; n<primitive.size(); n++)
+                qDebug() << primitive.value(n).get_d();
             if (primitive.value(0) == 5) {
                 // regular polygon
 
@@ -717,17 +728,197 @@ QList<QList<mpq_class> > ApertureMacro::calc( QList<mpq_class> arguments ) const
             }
         }
 
-        for (int n=0; n<args.size(); n++)
-            result << calc_intern1( args.at(n), arguments );
+        for (int n=0; n<args.size(); n++) {
+            QString term = args.at(n).simplified();
+            while (term.contains(' '))
+                term.remove( term.indexOf(' '), 1 ); // remove all spaces
+            //result << calc_intern1( term, arguments );
+            QList<ApertureMacro_internalRep> temp = calc_convertIntoInternalRep( term, arguments );
+            result << calc_processInternalRep( temp );
+        }
 
         entire_result << result;
     }
     return entire_result;
 }
 
-mpq_class ApertureMacro::calc_intern1( QString term, QList<mpq_class> arguments ) const
+//! \brief \internal expects \c term to be free of white space.
+//! Converts the \c term into an internal representation.
+//! \todo does not support the '=' operator
+QList<ApertureMacro_internalRep> ApertureMacro::calc_convertIntoInternalRep( QString term, QList<mpq_class> arguments ) const
 {
-    mpq_class temp;
+    if (term.isEmpty()) {
+        return QList<ApertureMacro_internalRep>();
+    }
 
-    return temp;
+    QList<ApertureMacro_internalRep> result;
+
+    bool ok;
+    int pos_after_number;
+    int pos = 0;
+    while (pos < term.length()) {
+        // check for placeholder
+        if (term.at(pos) == '$') {
+            mpq_class temp = GerberImporter::mpq_from_decimal_string( term.mid(pos+1), &ok, &pos_after_number );
+            if (!ok) {
+                // syntax error
+                return QList<ApertureMacro_internalRep>();
+            }
+            int num = (int)temp.get_d() - 1; // '$2' refers arguments.at(1)
+            if (arguments.size() <= num) {
+                // invalid placeholder
+                return QList<ApertureMacro_internalRep>();
+            }
+            result << ApertureMacro_internalRep( arguments.at(num) );
+            pos = pos_after_number+pos+1;
+            continue;
+        }
+        if (term.at(pos) == '+') {
+            result << ApertureMacro_internalRep( ApertureMacro_internalRep::plus );
+            pos++;
+            continue;
+        }
+        if (term.at(pos) == '-') {
+            result << ApertureMacro_internalRep( ApertureMacro_internalRep::minus );
+            pos++;
+            continue;
+        }
+        if (term.at(pos) == 'X') {
+            result << ApertureMacro_internalRep( ApertureMacro_internalRep::mul );
+            pos++;
+            continue;
+        }
+        if (term.at(pos) == '/') {
+            result << ApertureMacro_internalRep( ApertureMacro_internalRep::div );
+            pos++;
+            continue;
+        }
+        if (term.at(pos) == '=') {
+            qDebug() << "equate '=' unsupported";
+            return QList<ApertureMacro_internalRep>();
+        }
+
+        mpq_class temp = GerberImporter::mpq_from_decimal_string( term.mid(pos), &ok, &pos_after_number );
+        if (!ok) {
+            qDebug() << "syntax error";
+            return QList<ApertureMacro_internalRep>();
+        }
+        result << ApertureMacro_internalRep( temp );
+        pos = pos_after_number;
+    }
+
+    return result;
+}
+
+//! \brief reduce the internal representation to one value
+mpq_class ApertureMacro::calc_processInternalRep( QList<ApertureMacro_internalRep> temp ) const
+{
+    if (temp.isEmpty())
+        return mpq_class();
+
+    if (temp.size() == 1) {
+        if (temp.at(0).m_operator == ApertureMacro_internalRep::value)
+            return temp.at(0).m_value;
+        else {
+            qDebug() << "syntax error";
+            return mpq_class();
+        }
+    }
+
+    if ((temp.size()-1) % 2) {
+        qDebug() << "wrong number of elements";
+        return mpq_class();
+    }
+
+    // now reduce the list according to mathematical rules of priority
+
+    // '*', '/'
+    int pos = 1;
+    do {
+        if (temp.at(pos).m_operator == ApertureMacro_internalRep::mul || temp.at(pos).m_operator == ApertureMacro_internalRep::div) {
+            if (temp.at(pos-1).m_operator != ApertureMacro_internalRep::value || temp.at(pos+1).m_operator != ApertureMacro_internalRep::value) {
+                qDebug() << "invalid math operation.";
+                return mpq_class();
+            }
+            if (temp.at(pos).m_operator == ApertureMacro_internalRep::mul)
+                temp[pos-1].m_value = temp.at(pos-1).m_value * temp.at(pos+1).m_value;
+            else
+                temp[pos-1].m_value = temp.at(pos-1).m_value / temp.at(pos+1).m_value;
+            temp.removeAt(pos); // remove operator
+            temp.removeAt(pos); // remove 2nd argument
+            continue;
+        }
+        pos++;
+    } while (pos < temp.size());
+
+    // '+', '-'
+    pos = 0;
+    do {
+        if (temp.at(pos).m_operator == ApertureMacro_internalRep::plus || temp.at(pos).m_operator == ApertureMacro_internalRep::minus) {
+            if (temp.at(pos-1).m_operator != ApertureMacro_internalRep::value || temp.at(pos+1).m_operator != ApertureMacro_internalRep::value) {
+                qDebug() << "invalid math operation.";
+                return mpq_class();
+            }
+            if (temp.at(pos).m_operator == ApertureMacro_internalRep::plus)
+                temp[pos-1].m_value = temp.at(pos-1).m_value + temp.at(pos+1).m_value;
+            else
+                temp[pos-1].m_value = temp.at(pos-1).m_value - temp.at(pos+1).m_value;
+            temp.removeAt(pos); // remove operator
+            temp.removeAt(pos); // remove 2nd argument
+            continue;
+        }
+        pos++;
+    } while (pos < temp.size());
+
+    return temp.at(0).m_value;
+}
+
+////! \brief \internal expects \c term to be free of white space
+//mpq_class ApertureMacro::calc_intern1( QString term, QList<mpq_class> arguments ) const
+//{
+//    if (term.isEmpty())
+//        return 0;
+
+//    qDebug() << "calc:" << term;
+
+//    bool ok;
+//    int pos_after_number;
+//    mpq_class temp = GerberImporter::mpq_from_decimal_string( term, &ok, &pos_after_number );
+
+//    if (ok && pos_after_number >= term.length())
+//        return temp; // parser finished
+
+//    // check for placeholder
+//    if (!ok && term.at(0) == '$') {
+//        temp = GerberImporter::mpq_from_decimal_string( term.mid(1), &ok, &pos_after_number );
+
+//    }
+
+//    // perform calculation
+//    qDebug() << temp.get_d() << ok << pos_after_number;
+
+//    return mpq_class();
+//}
+
+
+
+
+
+
+
+ApertureMacro_internalRep::ApertureMacro_internalRep()
+{
+    m_operator = value;
+    m_value = 0;
+}
+
+ApertureMacro_internalRep::ApertureMacro_internalRep( mpq_class val )
+{
+    m_operator = value;
+    m_value = val;
+}
+
+ApertureMacro_internalRep::ApertureMacro_internalRep( Operator op )
+{
+    m_operator = op;
 }
