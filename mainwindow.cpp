@@ -5,11 +5,28 @@
 #include <QtCore>
 #include <QtGui>
 
-MainWindow::MainWindow(QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::MainWindow)
+#include <vtkRenderWindow.h>
+#include <vtkCubeSource.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkActor.h>
+
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    // setup vtk view
+    m_vtkRenderer = vtkRenderer::New();
+    ui->qvtkWidget->GetRenderWindow()->AddRenderer( m_vtkRenderer );
+    ui->qvtkWidget->GetRenderWindow()->Render();
+
+    vtkCubeSource* cube = vtkCubeSource::New();
+    vtkPolyDataMapper* mapper = vtkPolyDataMapper::New();
+    mapper->SetInputConnection( cube->GetOutputPort() );
+    vtkActor* actor = vtkActor::New();
+    actor->SetMapper( mapper );
+    m_vtkRenderer->AddViewProp( actor );
+    m_vtkRenderer->ResetCamera();
+    ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
 MainWindow::~MainWindow()

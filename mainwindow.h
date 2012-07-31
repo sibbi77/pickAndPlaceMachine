@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <vtkRenderer.h>
 
 namespace Ui {
 class MainWindow;
@@ -20,6 +21,9 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+
+protected:
+    vtkRenderer *m_vtkRenderer;
 };
 
 #endif // MAINWINDOW_H

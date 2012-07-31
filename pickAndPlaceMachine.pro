@@ -11,7 +11,7 @@ TEMPLATE = app
 
 # vtk
 INCLUDEPATH += /usr/include/vtk-5.8
-LIBS += -lQVTK
+LIBS += -lQVTK -lvtkCommon -lvtkRendering -lvtkGraphics -lvtkFiltering
 
 # gmp
 LIBS += -lgmpxx -lgmp

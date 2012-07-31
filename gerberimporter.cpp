@@ -544,7 +544,7 @@ Layer::~Layer()
 
 void Layer::draw( mpq_class x, mpq_class y )
 {
-    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
+//    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
 
     if (m_drawMode == on) {
         // assume linear interpolation with filling off
@@ -678,12 +678,12 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 
         QList<QList<mpq_class> > primitives = m_macro.calc( m_arguments );
         foreach (QList<mpq_class> primitive, primitives) {
-            qDebug() << "primitive:";
-            for (int n=0; n<primitive.size(); n++)
-                qDebug() << primitive.value(n).get_d();
+//            qDebug() << "primitive:";
+//            for (int n=0; n<primitive.size(); n++)
+//                qDebug() << primitive.value(n).get_d();
             if (primitive.value(0) == 5 && primitive.size() >= 5) {
                 // regular polygon
-                int exposure = primitive.value(1).get_d();
+                int exposure = primitive.value(1).get_d(); // FIXME
                 int numSides = primitive.value(2).get_d();
                 mpq_class center_x = primitive.value(3);
                 mpq_class center_y = primitive.value(4);
@@ -711,6 +711,9 @@ QGraphicsItem* Aperture::getGraphicsItem() const
                 }
                 QGraphicsPolygonItem* item = new QGraphicsPolygonItem(poly,group);
                 item->setBrush( QBrush(item->pen().color()) );
+            } else {
+                qDebug() << "invalid macro primitive";
+                return group;
             }
         }
         return group;
