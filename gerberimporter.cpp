@@ -2,6 +2,7 @@
 
 #include <QtCore>
 #include <QtGui>
+#include <cmath>
 
 GerberImporter::GerberImporter()
 {
@@ -680,9 +681,36 @@ QGraphicsItem* Aperture::getGraphicsItem() const
             qDebug() << "primitive:";
             for (int n=0; n<primitive.size(); n++)
                 qDebug() << primitive.value(n).get_d();
-            if (primitive.value(0) == 5) {
+            if (primitive.value(0) == 5 && primitive.size() >= 5) {
                 // regular polygon
+                int exposure = primitive.value(1).get_d();
+                int numSides = primitive.value(2).get_d();
+                mpq_class center_x = primitive.value(3);
+                mpq_class center_y = primitive.value(4);
+                mpq_class radius = primitive.value(5) / mpq_class(2);
+                mpq_class rotation;
+                if (primitive.size() >= 6)
+                    rotation = primitive.value(6);
+                else
+                    rotation = 0;
 
+                if (numSides < 2) {
+                    qDebug() << "invalid polygon.";
+                    return group; // invalid
+                }
+
+                QPolygonF poly;
+                for (int n=0; n<numSides; n++) {
+                    mpq_class temp1 = rotation / mpq_class(180);
+                    mpq_class temp2 = temp1 * M_PI;
+                    double radian = temp2.get_d();
+                    mpq_class x = center_x + radius * cos(radian);
+                    mpq_class y = center_y + radius * sin(radian);
+                    poly << QPointF(x.get_d(),y.get_d());
+                    rotation += mpq_class(360) / numSides;
+                }
+                QGraphicsPolygonItem* item = new QGraphicsPolygonItem(poly,group);
+                item->setBrush( QBrush(item->pen().color()) );
             }
         }
         return group;
