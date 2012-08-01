@@ -33,6 +33,7 @@ protected:
     QStringList m_primitives;
 
     QList<ApertureMacro_internalRep> calc_convertIntoInternalRep( QString term, QList<mpq_class> arguments ) const;
+    QList<ApertureMacro_internalRep> calc_canonicalize( QList<ApertureMacro_internalRep> temp ) const;
     mpq_class calc_processInternalRep( QList<ApertureMacro_internalRep> temp ) const;
     //mpq_class calc_intern1( QString term, QList<mpq_class> arguments ) const;
 };

@@ -681,18 +681,59 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 //            qDebug() << "primitive:";
 //            for (int n=0; n<primitive.size(); n++)
 //                qDebug() << primitive.value(n).get_d();
-            if (primitive.value(0) == 5 && primitive.size() >= 5) {
+            if (primitive.value(0) == 1) {
+                // circle
+                if (primitive.size() != 5) {
+                    qDebug() << "macro definition circle invalid.";
+                    return group;
+                }
+                int exposure = primitive.value(1).get_d(); // FIXME
+                mpq_class diameter = primitive.value(2);
+                mpq_class center_x = primitive.value(3);
+                mpq_class center_y = primitive.value(4);
+
+                mpq_class lower_x = center_x - diameter/mpq_class(2);
+                mpq_class lower_y = center_y - diameter/mpq_class(2);
+                QRectF rect( lower_x.get_d(), lower_y.get_d(), diameter.get_d(), diameter.get_d() );
+                QGraphicsEllipseItem* item = new QGraphicsEllipseItem(rect,group);
+                item->setBrush( QBrush(item->pen().color()) );
+
+            } else if (primitive.value(0) == 4) {
+                // outline
+                if (primitive.size() < 6) {
+                    qDebug() << "macro definition outline invalid.";
+                    return group;
+                }
+                int exposure = primitive.value(1).get_d(); // FIXME
+                int num = primitive.value(2).get_d();
+                if (primitive.size() != 1+5+2*num) {
+                    qDebug() << "macro definition outline invalid. Expected number of elements" << 1+5+2*num << "actual number of elements" << primitive.size();
+                    return group;
+                }
+
+                QPolygonF poly;
+                for (int n=0; n<num; n++) {
+                    mpq_class x = primitive.value(3+2*n);
+                    mpq_class y = primitive.value(4+2*n);
+                    poly << QPointF(x.get_d(),y.get_d());
+                }
+                QGraphicsPolygonItem* item = new QGraphicsPolygonItem(poly,group);
+                item->setBrush( QBrush(item->pen().color()) );
+                mpq_class rotation = primitive.value(5+2*num);
+                item->setRotation( rotation.get_d() );
+
+            } else if (primitive.value(0) == 5) {
                 // regular polygon
+                if (primitive.size() != 6 && primitive.size() != 7) {
+                    qDebug() << "macro definition regular polygon invalid.";
+                    return group;
+                }
                 int exposure = primitive.value(1).get_d(); // FIXME
                 int numSides = primitive.value(2).get_d();
                 mpq_class center_x = primitive.value(3);
                 mpq_class center_y = primitive.value(4);
                 mpq_class radius = primitive.value(5) / mpq_class(2);
-                mpq_class rotation;
-                if (primitive.size() >= 6)
-                    rotation = primitive.value(6);
-                else
-                    rotation = 0;
+                mpq_class rotation = primitive.value(6);
 
                 if (numSides < 2) {
                     qDebug() << "invalid polygon.";
@@ -711,8 +752,29 @@ QGraphicsItem* Aperture::getGraphicsItem() const
                 }
                 QGraphicsPolygonItem* item = new QGraphicsPolygonItem(poly,group);
                 item->setBrush( QBrush(item->pen().color()) );
+
+            } else if (primitive.value(0) == 21) {
+                // line (center)
+                if (primitive.size() != 7) {
+                    qDebug() << "macro definition line (center) invalid.";
+                    return group;
+                }
+                int exposure = primitive.value(1).get_d(); // FIXME
+                mpq_class width = primitive.value(2);
+                mpq_class height = primitive.value(3);
+                mpq_class center_x = primitive.value(4);
+                mpq_class center_y = primitive.value(5);
+                mpq_class rotation = primitive.value(6);
+
+                mpq_class lower_x = center_x-width/mpq_class(2);
+                mpq_class lower_y = center_y-height/mpq_class(2);
+                QRectF rect( lower_x.get_d(), lower_y.get_d(), width.get_d(), height.get_d() );
+                QGraphicsRectItem* item = new QGraphicsRectItem(rect,group);
+                item->setRotation( rotation.get_d() );
+                item->setBrush( QBrush(item->pen().color()) );
+
             } else {
-                qDebug() << "invalid macro primitive";
+                qDebug() << "unsupported macro primitive" << (int)primitive.value(0).get_d();
                 return group;
             }
         }
@@ -765,6 +827,7 @@ QList<QList<mpq_class> > ApertureMacro::calc( QList<mpq_class> arguments ) const
                 term.remove( term.indexOf(' '), 1 ); // remove all spaces
             //result << calc_intern1( term, arguments );
             QList<ApertureMacro_internalRep> temp = calc_convertIntoInternalRep( term, arguments );
+            temp = calc_canonicalize( temp );
             result << calc_processInternalRep( temp );
         }
 
@@ -835,10 +898,61 @@ QList<ApertureMacro_internalRep> ApertureMacro::calc_convertIntoInternalRep( QSt
             return QList<ApertureMacro_internalRep>();
         }
         result << ApertureMacro_internalRep( temp );
-        pos = pos_after_number;
+        pos = pos + pos_after_number;
     }
 
     return result;
+}
+
+//! \brief combine unary minus or plus into following (positive) value.
+//! The function calc_convertIntoInternalRep() parses a minus or plus sign into an operator.
+//! This is not neccessarily correct. E.g. "-1" is parsed into "operator-" "1".
+QList<ApertureMacro_internalRep> ApertureMacro::calc_canonicalize( QList<ApertureMacro_internalRep> temp ) const
+{
+    if (temp.isEmpty() || temp.size() == 1)
+        return temp;
+
+    // simple cases
+    if (temp.at(0).m_operator == ApertureMacro_internalRep::plus) {
+        temp.removeFirst();
+    } else if (temp.at(0).m_operator == ApertureMacro_internalRep::minus) {
+        if (temp.at(1).m_operator == ApertureMacro_internalRep::value) {
+            temp[1].m_value *= -1;
+            temp.removeFirst();
+        } else {
+            qDebug() << "invalid macro syntax";
+            return QList<ApertureMacro_internalRep>();
+        }
+    }
+
+    if (temp.last().m_operator != ApertureMacro_internalRep::value || temp.first().m_operator != ApertureMacro_internalRep::value) {
+        qDebug() << "invalid macro syntax (operator without value)";
+        return QList<ApertureMacro_internalRep>();
+    }
+
+    for (int n=1; n<temp.size(); n++) {
+        if (temp.at(n-1).m_operator != ApertureMacro_internalRep::value && temp.at(n).m_operator != ApertureMacro_internalRep::value) {
+            // two operators directly behind each other
+            if ((temp.at(n-1).m_operator == ApertureMacro_internalRep::mul || temp.at(n-1).m_operator == ApertureMacro_internalRep::div) && temp.at(n).m_operator == ApertureMacro_internalRep::plus) {
+                temp.removeAt(n); // remove "operator+"
+                n = 0; // start over
+                continue;
+            }
+            if ((temp.at(n-1).m_operator == ApertureMacro_internalRep::mul || temp.at(n-1).m_operator == ApertureMacro_internalRep::div) && temp.at(n).m_operator == ApertureMacro_internalRep::minus) {
+                if (n+1 < temp.size() && temp.at(n+1).m_operator == ApertureMacro_internalRep::value) {
+                    temp[n+1].m_value *= -1;
+                    temp.removeAt(n); // remove "operator-"
+                    n = 0; // start over
+                    continue;
+                } else {
+                    qDebug() << "invalid macro syntax (operator without value)";
+                    return QList<ApertureMacro_internalRep>();
+                }
+            }
+        }
+    }
+
+    return temp;
 }
 
 //! \brief reduce the internal representation to one value
