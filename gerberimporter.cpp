@@ -80,7 +80,11 @@ bool GerberImporter::processDataBlock( QString dataBlock )
         drawG03( dataBlock );
     else if (dataBlock.left(1) == "D")
         setDCode( dataBlock );
-    else if (dataBlock.left(4) == "G54D")
+    else if (dataBlock.left(3) == "G36")
+        currentLayer().startOutlineFill();
+    else if (dataBlock.left(3) == "G37")
+        currentLayer().stopOutlineFill();
+    else if (dataBlock.left(3) == "G54")
         setDCode( dataBlock.mid(3) );
     else if ((dataBlock.left(1) == "X") || (dataBlock.left(1) == "Y"))
         draw( dataBlock );
@@ -259,7 +263,7 @@ void GerberImporter::parameterAD( QString parameterBlock )
             }
             mpq_class temp = mpq_from_decimal_string( argument_str );
             arguments << temp;
-            qDebug() << "argument:" << temp.get_d();
+//            qDebug() << "argument:" << temp.get_d();
             if (pos < aperture_str.length() && aperture_str.at(pos) == 'X')
                 pos++; // next argument
         }
@@ -306,7 +310,7 @@ void GerberImporter::parameterAD( QString parameterBlock )
 
 void GerberImporter::parameterAM( QString collect_parameter_AM )
 {
-    qDebug() << "macro:" << collect_parameter_AM;
+//    qDebug() << "macro:" << collect_parameter_AM;
 
     collect_parameter_AM = collect_parameter_AM.trimmed();
 
@@ -533,6 +537,7 @@ Layer::Layer(QHash<int,Aperture> apertures)
     m_drawMode = off;
     m_aperture = 0;
     m_interpolationMode = linear;
+    m_outlineFillMode = fillOff;
 
     m_apertures = apertures;
 }
@@ -546,27 +551,65 @@ void Layer::draw( mpq_class x, mpq_class y )
 {
 //    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
 
-    if (m_drawMode == on) {
-        // assume linear interpolation with filling off
-        if (!m_apertures.contains(m_aperture)) {
-            qDebug() << "cannot draw line; undefined aperture.";
+    if (m_outlineFillMode == fillOff) {
+        if (m_drawMode == on) {
+            // assume linear interpolation
+            if (!m_apertures.contains(m_aperture)) {
+                qDebug() << "cannot draw line; undefined aperture.";
+                return;
+            }
+    //        qDebug() << "Layer::draw() m_aperture=" << m_aperture << "diameter=" << m_apertures.value(m_aperture).diameter().get_d();
+            Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
+            m_objects << line;
+        } else if (m_drawMode == flash) {
+            Flash* flash = new Flash( x, y, m_apertures.value(m_aperture) );
+            m_objects << flash;
+        }
+    } else {
+        // filled outline
+        // assume linear interpolation
+        if (m_drawMode == off) {
+            // finish last outline
+            drawFilledOutline( m_outlineFillPoints );
+            m_outlineFillPoints.clear();
+        } else if (m_drawMode == on) {
+            if (m_outlineFillPoints.isEmpty() || m_outlineFillPoints.last() != QPair<mpq_class,mpq_class>(x,y))
+                m_outlineFillPoints << QPair<mpq_class,mpq_class>(x,y);
+        } else {
+            qDebug() << "Flash (D03) invalid in filled outline mode.";
             return;
         }
-        Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
-        m_objects << line;
-    } else if (m_drawMode == flash) {
-        Flash* flash = new Flash( x, y, m_apertures.value(m_aperture) );
-        m_objects << flash;
     }
+
 
     m_current_x = x;
     m_current_y = y;
+}
+
+void Layer::drawFilledOutline( QList< QPair<mpq_class,mpq_class> > points )
+{
+    FilledOutline* filledOutline = new FilledOutline( points );
+    m_objects << filledOutline;
 }
 
 void Layer::defineAperture( int num, Aperture aperture )
 {
     m_apertures[num] = aperture;
 }
+
+void Layer::startOutlineFill()
+{
+    m_outlineFillMode = fillOn;
+    m_outlineFillPoints.clear();
+}
+
+void Layer::stopOutlineFill()
+{
+    m_outlineFillMode = fillOff;
+    drawFilledOutline( m_outlineFillPoints );
+    m_outlineFillPoints.clear();
+}
+
 
 
 
@@ -620,11 +663,30 @@ QGraphicsItem* Flash::getGraphicsItem() const
     qreal y = m_y.get_d();
     QGraphicsItem* item = m_aperture.getGraphicsItem();
     item->moveBy( x, y );
-    qDebug() << item->pos() << item->boundingRect();
+    qDebug() << "Flash::getGraphicsItem()" << item->pos() << item->boundingRect();
     return item;
 }
 
+FilledOutline::FilledOutline( QList< QPair<mpq_class,mpq_class> > points )
+{
+    if (!points.isEmpty() && points.first() == points.last())
+        points.removeLast();
+    m_points = points;
+}
 
+//! \todo currently no support for arcs
+QGraphicsItem* FilledOutline::getGraphicsItem() const
+{
+    QPolygonF polygon;
+    typedef QPair<mpq_class,mpq_class> Pair;
+    foreach (Pair point, m_points) {
+        polygon << QPointF( point.first.get_d(), point.second.get_d() );
+    }
+
+    QGraphicsPolygonItem* polygonItem = new QGraphicsPolygonItem(polygon);
+    polygonItem->setBrush( polygonItem->pen().color() );
+    return polygonItem;
+}
 
 
 
@@ -667,10 +729,36 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 {
     if (type() == circle) {
         qreal dia = diameter().get_d();
-        QGraphicsEllipseItem* circle = new QGraphicsEllipseItem(-dia/2.0,-dia/2.0,dia,dia);
-        QBrush brush( circle->pen().color() );
-        circle->setBrush( brush );
-        return circle;
+        QGraphicsItem* item;
+        if (m_arguments.size() == 1) {
+            QGraphicsEllipseItem* circle = new QGraphicsEllipseItem(-dia/2.0,-dia/2.0,dia,dia);
+            circle->setBrush( circle->pen().color() );
+            item = circle;
+        } else if (m_arguments.size() == 2) {
+            // circular shape with circular hole
+            qreal dia2 = m_arguments.at(1).get_d();
+            QPainterPath path;
+            path.addEllipse( QPointF(0,0), dia/2.0, dia/2.0 );
+            path.addEllipse( QPointF(0,0), dia2/2.0, dia2/2.0 );
+            QGraphicsPathItem* circle = new QGraphicsPathItem(path);
+            circle->setBrush( circle->pen().color() );
+            item = circle;
+        } else if (m_arguments.size() == 3) {
+            // circular shape with rectangular hole
+            qreal width  = m_arguments.at(1).get_d();
+            qreal height = m_arguments.at(2).get_d();
+            QPainterPath path;
+            path.addEllipse( QPointF(0,0), dia/2.0, dia/2.0 );
+            path.addRect( -width/2.0, -height/2.0, width, height );
+            QGraphicsPathItem* circle = new QGraphicsPathItem(path);
+            circle->setBrush( circle->pen().color() );
+            item = circle;
+        } else {
+            qDebug() << "invalid circular aperture definition";
+            return 0;
+        }
+
+        return item;
     }
     if (type() == macro) {
         qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
@@ -794,7 +882,7 @@ ApertureMacro::ApertureMacro()
 
 ApertureMacro::ApertureMacro( QStringList primitives )
 {
-    qDebug() << "ApertureMacro:" << primitives;
+//    qDebug() << "ApertureMacro:" << primitives;
     m_primitives = primitives;
 }
 
@@ -1018,32 +1106,6 @@ mpq_class ApertureMacro::calc_processInternalRep( QList<ApertureMacro_internalRe
     return temp.at(0).m_value;
 }
 
-////! \brief \internal expects \c term to be free of white space
-//mpq_class ApertureMacro::calc_intern1( QString term, QList<mpq_class> arguments ) const
-//{
-//    if (term.isEmpty())
-//        return 0;
-
-//    qDebug() << "calc:" << term;
-
-//    bool ok;
-//    int pos_after_number;
-//    mpq_class temp = GerberImporter::mpq_from_decimal_string( term, &ok, &pos_after_number );
-
-//    if (ok && pos_after_number >= term.length())
-//        return temp; // parser finished
-
-//    // check for placeholder
-//    if (!ok && term.at(0) == '$') {
-//        temp = GerberImporter::mpq_from_decimal_string( term.mid(1), &ok, &pos_after_number );
-
-//    }
-
-//    // perform calculation
-//    qDebug() << temp.get_d() << ok << pos_after_number;
-
-//    return mpq_class();
-//}
 
 
 

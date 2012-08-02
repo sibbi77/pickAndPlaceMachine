@@ -94,11 +94,22 @@ protected:
     Aperture m_aperture;
 };
 
+class FilledOutline : public Object
+{
+public:
+    FilledOutline( QList<QPair<mpq_class, mpq_class> > points );
+    virtual QGraphicsItem* getGraphicsItem() const;
+
+protected:
+    QList< QPair<mpq_class,mpq_class> > m_points;
+};
+
 class Layer
 {
 public:
     enum ImagePolarity {positive, negative};
     enum DrawMode {on,off,flash};
+    enum OutlineFillMode {fillOn,fillOff};
     enum InterpolationMode {linear,clockwise,counterclockwise};
 
 public:
@@ -122,6 +133,8 @@ public:
     void setY( mpq_class y ) {m_current_y = y;}
     mpq_class y() const {return m_current_y;}
     void defineAperture( int num, Aperture aperture );
+    void startOutlineFill();
+    void stopOutlineFill();
 
     QList<Object*> getObjects() const {return m_objects;}
 
@@ -135,7 +148,12 @@ protected:
     DrawMode m_drawMode;
     int m_aperture;
 
+    OutlineFillMode m_outlineFillMode;
+    QList< QPair<mpq_class,mpq_class> > m_outlineFillPoints;
+
     QHash<int,Aperture> m_apertures; //!< Layer specific apertures
+
+    void drawFilledOutline( QList< QPair<mpq_class,mpq_class> > points );
 };
 
 class GerberImporter
@@ -161,6 +179,8 @@ protected:
     void drawG03( QString dataBlock );
     void draw( QString dataBlock );
     void setDCode( QString dataBlock );
+    void startOutlineFill();
+    void stopOutlineFill();
     mpq_class makeCoordinate( QString str );
 
     Layer& newLayer();

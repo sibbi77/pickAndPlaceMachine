@@ -14,6 +14,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 {
     ui->setupUi(this);
 
+    // setup QGraphics view
+    ui->graphicsView->scale(1,-1);
+
     // setup vtk view
     m_vtkRenderer = vtkRenderer::New();
     ui->qvtkWidget->GetRenderWindow()->AddRenderer( m_vtkRenderer );
@@ -27,6 +30,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_vtkRenderer->AddViewProp( actor );
     m_vtkRenderer->ResetCamera();
     ui->qvtkWidget->GetRenderWindow()->Render();
+
+
+
+
+
+
+    // TEST
+    QGraphicsScene* scene = new QGraphicsScene;
+    QPainterPath path;
+    path.addEllipse( QPointF(0,0), 10, 10 );
+    path.addEllipse( QPointF(1,1), 5, 5 );
+    QGraphicsPathItem* item = new QGraphicsPathItem(path);
+    item->setBrush( item->pen().color() );
+    scene->addItem( item );
+
+    ui->graphicsView->setScene(scene);
+    ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
 }
 
 MainWindow::~MainWindow()
