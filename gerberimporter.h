@@ -83,6 +83,31 @@ protected:
     Aperture m_aperture;
 };
 
+class Line_cw_ccw : public Object
+{
+public:
+    Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture );
+    virtual QGraphicsItem* getGraphicsItem( bool ccw ) const;
+
+protected:
+    mpq_class m_x1, m_y1, m_x2, m_y2, m_i, m_j;
+    Aperture m_aperture;
+};
+
+class Line_cw : public Line_cw_ccw
+{
+public:
+    Line_cw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture );
+    virtual QGraphicsItem* getGraphicsItem() const;
+};
+
+class Line_ccw : public Line_cw_ccw
+{
+public:
+    Line_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture );
+    virtual QGraphicsItem* getGraphicsItem() const;
+};
+
 class Flash : public Object
 {
 public:
@@ -127,7 +152,7 @@ public:
     DrawMode drawMode() const {return m_drawMode;}
     void setAperture( int aperture ) {m_aperture = aperture;}
     int aperture() const {return m_aperture;}
-    void draw( mpq_class x, mpq_class y );
+    void draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j );
     void setX( mpq_class x ) {m_current_x = x;}
     mpq_class x() const {return m_current_x;}
     void setY( mpq_class y ) {m_current_y = y;}

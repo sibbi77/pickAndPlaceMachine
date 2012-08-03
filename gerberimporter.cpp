@@ -388,6 +388,8 @@ void GerberImporter::draw( QString dataBlock )
 
     mpq_class x = currentLayer().x();
     mpq_class y = currentLayer().y();
+    mpq_class i = 0;
+    mpq_class j = 0;
 
     int pos = 0;
     if (pos < dataBlock.length() && dataBlock.at(pos) == 'X') {
@@ -406,13 +408,29 @@ void GerberImporter::draw( QString dataBlock )
         }
         y = makeCoordinate( y_str );
     }
+    if (pos < dataBlock.length() && dataBlock.at(pos) == 'I') {
+        QString i_str;
+        pos++;
+        while (pos < dataBlock.length() && (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+'))) {
+            i_str += dataBlock.at(pos++);
+        }
+        i = makeCoordinate( i_str );
+    }
+    if (pos < dataBlock.length() && dataBlock.at(pos) == 'J') {
+        QString j_str;
+        pos++;
+        while (pos < dataBlock.length() && (dataBlock.at(pos).isDigit() || (dataBlock.at(pos) == '-') || (dataBlock.at(pos) == '+'))) {
+            j_str += dataBlock.at(pos++);
+        }
+        j = makeCoordinate( j_str );
+    }
 
     if (pos < dataBlock.length() && dataBlock.at(pos) == 'D') {
         // parse D code
         setDCode( dataBlock.mid(pos) );
     }
 
-    currentLayer().draw(x,y);
+    currentLayer().draw(x,y,i,j);
 }
 
 void GerberImporter::setDCode( QString dataBlock )
@@ -547,20 +565,30 @@ Layer::~Layer()
 
 }
 
-void Layer::draw( mpq_class x, mpq_class y )
+void Layer::draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j )
 {
 //    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
 
     if (m_outlineFillMode == fillOff) {
         if (m_drawMode == on) {
-            // assume linear interpolation
+            // linear or circular interpolation
             if (!m_apertures.contains(m_aperture)) {
                 qDebug() << "cannot draw line; undefined aperture.";
                 return;
             }
     //        qDebug() << "Layer::draw() m_aperture=" << m_aperture << "diameter=" << m_apertures.value(m_aperture).diameter().get_d();
-            Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
-            m_objects << line;
+            if (m_interpolationMode == linear) {
+                Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
+                m_objects << line;
+            } else if (m_interpolationMode == clockwise) {
+                qDebug() << "Layer::draw()" << x.get_d() << y.get_d() << i.get_d() << j.get_d();
+                Line_cw* line = new Line_cw( m_current_x, m_current_y, x, y, i, j, m_apertures.value(m_aperture) );
+                m_objects << line;
+            } else if (m_interpolationMode == counterclockwise) {
+                qDebug() << "Layer::draw()" << x.get_d() << y.get_d() << i.get_d() << j.get_d();
+                Line_ccw* line = new Line_ccw( m_current_x, m_current_y, x, y, i, j, m_apertures.value(m_aperture) );
+                m_objects << line;
+            }
         } else if (m_drawMode == flash) {
             Flash* flash = new Flash( x, y, m_apertures.value(m_aperture) );
             m_objects << flash;
@@ -648,6 +676,83 @@ QGraphicsItem* Line::getGraphicsItem() const
     QGraphicsLineItem* line = new QGraphicsLineItem(x1,y1,x2,y2);
     line->setPen( pen );
     return line;
+}
+
+Line_cw_ccw::Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture )
+{
+    m_x1 = x1;
+    m_y1 = y1;
+    m_x2 = x2;
+    m_y2 = y2;
+    m_i = i;
+    m_j = j;
+    m_aperture = aperture;
+}
+
+QGraphicsItem* Line_cw_ccw::getGraphicsItem( bool ccw ) const
+{
+    QPen pen;
+    if (m_aperture.type() == Aperture::circle) {
+        pen.setWidthF( m_aperture.diameter().get_d() );
+        pen.setCapStyle( Qt::RoundCap );
+    } else {
+        qDebug() << "Line_cw_ccw::getGraphicsItem(): unsupported aperture";
+    }
+    qreal x1 = m_x1.get_d();
+    qreal y1 = m_y1.get_d();
+    qreal x2 = m_x2.get_d();
+    qreal y2 = m_y2.get_d();
+    qreal i = m_i.get_d(); // attention: absolute value in single quadrant mode!
+    qreal j = m_j.get_d(); // attention: absolute value in single quadrant mode!
+    qreal center_x = x1+i; // FIXME only valid in multi quadrant mode!
+    qreal center_y = y1+j; // FIXME only valid in multi quadrant mode!
+    qreal radius1 = sqrt( pow(center_x-x1,2.0) + pow(center_y-y1,2.0) );
+    qreal radius2 = sqrt( pow(center_x-x2,2.0) + pow(center_y-y2,2.0) );
+    QPainterPath path;
+    qreal startAngle = atan2(y1-center_y,x1-center_x)/M_PI*180.0;
+    qreal stopAngle = atan2(y2-center_y,x2-center_x)/M_PI*180.0;
+    qreal spanAngle = abs(stopAngle - startAngle);
+    if (ccw)
+        spanAngle = -spanAngle;
+    path.arcMoveTo( center_x-radius1, center_y-radius1, radius1*2.0, radius1*2.0, -startAngle );
+    path.arcTo( center_x-radius1, center_y-radius1, radius1*2.0, radius1*2.0, -startAngle, spanAngle );
+    QGraphicsPathItem* pathItem = new QGraphicsPathItem(path);
+    pathItem->setPen( pen );
+
+    // DEBUG
+    QGraphicsItemGroup* group = new QGraphicsItemGroup;
+    group->addToGroup( pathItem );
+    QGraphicsEllipseItem* e1 = new QGraphicsEllipseItem( x1-m_aperture.diameter().get_d()/2.0, y1-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+    e1->setPen( QColor("red") );
+    group->addToGroup( e1 );
+    QGraphicsEllipseItem* e2 = new QGraphicsEllipseItem( x2-m_aperture.diameter().get_d()/2.0, y2-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+    e2->setPen( QColor("green") );
+    group->addToGroup( e2 );
+    QGraphicsEllipseItem* e3 = new QGraphicsEllipseItem( center_x-m_aperture.diameter().get_d()/2.0, center_y-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+    e3->setPen( QColor("blue") );
+    group->addToGroup( e3 );
+    return group;
+
+    return pathItem;
+}
+
+
+Line_cw::Line_cw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture ) : Line_cw_ccw(x1,y1,x2,y2,i,j,aperture)
+{
+}
+
+QGraphicsItem* Line_cw::getGraphicsItem() const
+{
+    return Line_cw_ccw::getGraphicsItem( false );
+}
+
+Line_ccw::Line_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture ) : Line_cw_ccw(x1,y1,x2,y2,i,j,aperture)
+{
+}
+
+QGraphicsItem* Line_ccw::getGraphicsItem() const
+{
+    return Line_cw_ccw::getGraphicsItem( true );
 }
 
 Flash::Flash( mpq_class x, mpq_class y, Aperture aperture )
