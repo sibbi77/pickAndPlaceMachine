@@ -150,31 +150,35 @@ void GerberImporter::parameterFS( QString parameterBlock )
         qDebug() << "FS specified multiple times";
         return;
     }
-    if (parameterBlock.mid(2,1) == "L")
+    int pos=2;
+    if (parameterBlock.mid(pos,1) == "L") {
         m_FS_zero = omit_leading;
-    else if (parameterBlock.mid(2,1) == "T")
+        pos++;
+    } else if (parameterBlock.mid(pos,1) == "T") {
         m_FS_zero = omit_trailing;
-    else {
-        qDebug() << "FS error";
-        return;
+        pos++;
+    } else {
+        qDebug() << "FS error; neither omit leading zeros nor omit trailing zeros specified. Defaulting to omit leading zeros.";
+        m_FS_zero = omit_leading;
+//        return;
     }
-    if (parameterBlock.mid(3,1) == "A")
+    if (parameterBlock.mid(pos,1) == "A")
         ;
-    else if (parameterBlock.mid(3,1) == "I") {
+    else if (parameterBlock.mid(pos,1) == "I") {
         qDebug() << "FS I unsupported";
         return;
     } else {
         qDebug() << "FS error";
         return;
     }
-    int pos = 4;
+    pos++;
     if (parameterBlock.mid(pos,1) == "N") {
         qDebug() << "FS N unsupported";
-        pos += 3;
+        pos += 2;
     }
     if (parameterBlock.mid(pos,1) == "G") {
         qDebug() << "FS G unsupported";
-        pos += 3;
+        pos += 2;
     }
     if (parameterBlock.mid(pos,1) == "X") {
         bool ok;
@@ -329,7 +333,9 @@ void GerberImporter::parameterAM( QString collect_parameter_AM )
         while (pos < collect_parameter_AM.length() && collect_parameter_AM.at(pos) != '*')
             primitive += collect_parameter_AM.at(pos++);
         collect_parameter_AM.remove(0,pos+1);
-        primitives << primitive;
+        primitive = primitive.trimmed();
+        if (!primitive.isEmpty())
+            primitives << primitive;
     }
 
     ApertureMacro macro( primitives );
@@ -924,37 +930,61 @@ void Aperture::setMacro( ApertureMacro apertureMacro, QList<mpq_class> arguments
 QGraphicsItem* Aperture::getGraphicsItem() const
 {
     if (type() == circle) {
-        qreal dia = diameter().get_d();
-        QGraphicsItem* item;
-        if (m_arguments.size() == 1) {
-            QGraphicsEllipseItem* circle = new QGraphicsEllipseItem(-dia/2.0,-dia/2.0,dia,dia);
-            circle->setBrush( circle->pen().color() );
-            item = circle;
-        } else if (m_arguments.size() == 2) {
+        if (m_arguments.isEmpty()) {
+            qDebug() << "invalid circular aperture definition (too few arguments)";
+            return 0;
+        }
+        QPainterPath path;
+        qreal radius = mpq_class(diameter()/2).get_d();
+        path.addEllipse( QPointF(0,0), radius, radius );
+
+        if (m_arguments.size() == 2) {
             // circular shape with circular hole
             qreal dia2 = m_arguments.at(1).get_d();
-            QPainterPath path;
-            path.addEllipse( QPointF(0,0), dia/2.0, dia/2.0 );
             path.addEllipse( QPointF(0,0), dia2/2.0, dia2/2.0 );
-            QGraphicsPathItem* circle = new QGraphicsPathItem(path);
-            circle->setBrush( circle->pen().color() );
-            item = circle;
         } else if (m_arguments.size() == 3) {
             // circular shape with rectangular hole
             qreal width  = m_arguments.at(1).get_d();
             qreal height = m_arguments.at(2).get_d();
-            QPainterPath path;
-            path.addEllipse( QPointF(0,0), dia/2.0, dia/2.0 );
             path.addRect( -width/2.0, -height/2.0, width, height );
-            QGraphicsPathItem* circle = new QGraphicsPathItem(path);
-            circle->setBrush( circle->pen().color() );
-            item = circle;
-        } else {
-            qDebug() << "invalid circular aperture definition";
+        } else if (m_arguments.size() > 3) {
+            qDebug() << "invalid circular aperture definition (too many arguments)";
             return 0;
         }
 
-        return item;
+        QGraphicsPathItem* circle = new QGraphicsPathItem(path);
+        circle->setBrush( circle->pen().color() );
+
+        return circle;
+    }
+    if (type() == rectangle) {
+        if (m_arguments.size() < 2) {
+            qDebug() << "invalid rectangular aperture definition (too few arguments)";
+            return 0;
+        }
+        QPainterPath path;
+        qreal width  = m_arguments.at(0).get_d();
+        qreal height = m_arguments.at(1).get_d();
+        path.addRect( -width/2.0, -height/2.0, width, height );
+
+        if (m_arguments.size() == 3) {
+            // circular hole
+            qreal radius = mpq_class(m_arguments.at(2)/2).get_d();
+            path.addEllipse( QPointF(0,0), radius, radius );
+        } else if (m_arguments.size() == 4) {
+            // rectangular hole
+            qreal width  = m_arguments.at(2).get_d();
+            qreal height = m_arguments.at(3).get_d();
+            path.addRect( -width/2.0, -height/2.0, width, height );
+        } else if (m_arguments.size() > 4) {
+            qDebug() << "invalid circular aperture definition (too many arguments)";
+            return 0;
+        }
+
+        QGraphicsPathItem* rect = new QGraphicsPathItem(path);
+        rect->setBrush( rect->pen().color() );
+
+        return rect;
     }
     if (type() == oval) {
         // obround (oval) aperture
@@ -1015,7 +1045,7 @@ QGraphicsItem* Aperture::getGraphicsItem() const
         return pathItem;
     }
     if (type() == macro) {
-        qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
+//        qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
         QGraphicsItemGroup* group = new QGraphicsItemGroup;
 
         QList<QList<mpq_class> > primitives = m_macro.calc( m_arguments );
