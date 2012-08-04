@@ -271,18 +271,16 @@ void GerberImporter::parameterAD( QString parameterBlock )
 
     if (aperture_str.left(2) == "C,") {
         // circular aperture
-        if (arguments.size() == 1)
-            aperture.setCircle( arguments.at(0) );
-        else if (arguments.size() == 2)
-            aperture.setCircle( arguments.at(0), arguments.at(1) );
-        else if (arguments.size() == 3)
-            aperture.setCircle( arguments.at(0), arguments.at(1), arguments.at(2) );
+        aperture.setCircle( arguments );
     } else if (aperture_str.left(2) == "R,") {
         // rectangular aperture
+        aperture.setRectangle( arguments );
     } else if (aperture_str.left(2) == "O,") {
         // oval aperture
+        aperture.setOval( arguments );
     } else if (aperture_str.left(2) == "P,") {
         // polygon aperture
+        aperture.setPolygon( arguments );
     } else {
         // custom macro
         int idx = aperture_str.indexOf(',');
@@ -719,19 +717,19 @@ QGraphicsItem* Line_cw_ccw::getGraphicsItem( bool ccw ) const
     QGraphicsPathItem* pathItem = new QGraphicsPathItem(path);
     pathItem->setPen( pen );
 
-    // DEBUG
-    QGraphicsItemGroup* group = new QGraphicsItemGroup;
-    group->addToGroup( pathItem );
-    QGraphicsEllipseItem* e1 = new QGraphicsEllipseItem( x1-m_aperture.diameter().get_d()/2.0, y1-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
-    e1->setPen( QColor("red") );
-    group->addToGroup( e1 );
-    QGraphicsEllipseItem* e2 = new QGraphicsEllipseItem( x2-m_aperture.diameter().get_d()/2.0, y2-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
-    e2->setPen( QColor("green") );
-    group->addToGroup( e2 );
-    QGraphicsEllipseItem* e3 = new QGraphicsEllipseItem( center_x-m_aperture.diameter().get_d()/2.0, center_y-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
-    e3->setPen( QColor("blue") );
-    group->addToGroup( e3 );
-    return group;
+//    // DEBUG
+//    QGraphicsItemGroup* group = new QGraphicsItemGroup;
+//    group->addToGroup( pathItem );
+//    QGraphicsEllipseItem* e1 = new QGraphicsEllipseItem( x1-m_aperture.diameter().get_d()/2.0, y1-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+//    e1->setPen( QColor("red") );
+//    group->addToGroup( e1 );
+//    QGraphicsEllipseItem* e2 = new QGraphicsEllipseItem( x2-m_aperture.diameter().get_d()/2.0, y2-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+//    e2->setPen( QColor("green") );
+//    group->addToGroup( e2 );
+//    QGraphicsEllipseItem* e3 = new QGraphicsEllipseItem( center_x-m_aperture.diameter().get_d()/2.0, center_y-m_aperture.diameter().get_d()/2.0, m_aperture.diameter().get_d(), m_aperture.diameter().get_d() );
+//    e3->setPen( QColor("blue") );
+//    group->addToGroup( e3 );
+//    return group;
 
     return pathItem;
 }
@@ -767,8 +765,12 @@ QGraphicsItem* Flash::getGraphicsItem() const
     qreal x = m_x.get_d();
     qreal y = m_y.get_d();
     QGraphicsItem* item = m_aperture.getGraphicsItem();
-    item->moveBy( x, y );
-    qDebug() << "Flash::getGraphicsItem()" << item->pos() << item->boundingRect();
+    if (item) {
+        item->moveBy( x, y );
+        qDebug() << "Flash::getGraphicsItem():" << item->pos() << item->boundingRect();
+    } else {
+        qDebug() << "Flash::getGraphicsItem(): cannot get aperture";
+    }
     return item;
 }
 
@@ -802,6 +804,23 @@ Aperture::Aperture()
     m_hole = noHole;
 }
 
+void Aperture::setCircle( QList<mpq_class> arguments )
+{
+    m_arguments = arguments;
+    m_type = circle;
+    if (arguments.size() == 1)
+        m_hole = noHole;
+    else if (arguments.size() == 2)
+        m_hole = circularHole;
+    else if (arguments.size() == 3)
+        m_hole = rectangularHole;
+    else {
+        qDebug() << "Aperture::setCircle(): invalid number of arguments.";
+        m_type = invalid;
+        m_arguments.clear();
+    }
+}
+
 void Aperture::setCircle( mpq_class diameter, mpq_class x_hole_dimension, mpq_class y_hole_dimension )
 {
     qDebug() << "Aperture::setCircle()" << diameter.get_d() << x_hole_dimension.get_d() << y_hole_dimension.get_d();
@@ -820,6 +839,78 @@ void Aperture::setCircle( mpq_class diameter, mpq_class x_hole_dimension, mpq_cl
             m_hole = rectangularHole;
             m_arguments << y_hole_dimension;
         }
+    }
+}
+
+void Aperture::setOval( QList<mpq_class> arguments )
+{
+    m_arguments = arguments;
+    m_type = oval;
+    if (arguments.size() == 2)
+        m_hole = noHole;
+    else if (arguments.size() == 3)
+        m_hole = circularHole;
+    else if (arguments.size() == 4)
+        m_hole = rectangularHole;
+    else {
+        qDebug() << "Aperture::setOval(): invalid number of arguments.";
+        m_type = invalid;
+        m_arguments.clear();
+    }
+}
+
+void Aperture::setOval( mpq_class x_length, mpq_class y_length, mpq_class x_hole_dimension, mpq_class y_hole_dimension )
+{
+    qDebug() << "Aperture::setOval()" << x_length.get_d() << y_length.get_d() << x_hole_dimension.get_d() << y_hole_dimension.get_d();
+
+    m_type = oval;
+    m_hole = noHole;
+    m_arguments.clear();
+    m_arguments << x_length << y_length;
+
+    if (x_hole_dimension != -1) {
+        // enable circular hole
+        m_hole = circularHole;
+        m_arguments << x_hole_dimension;
+        if (y_hole_dimension != -1) {
+            // enable rectangular hole
+            m_hole = rectangularHole;
+            m_arguments << y_hole_dimension;
+        }
+    }
+}
+
+void Aperture::setRectangle( QList<mpq_class> arguments )
+{
+    m_arguments = arguments;
+    m_type = rectangle;
+    if (arguments.size() == 2)
+        m_hole = noHole;
+    else if (arguments.size() == 3)
+        m_hole = circularHole;
+    else if (arguments.size() == 4)
+        m_hole = rectangularHole;
+    else {
+        qDebug() << "Aperture::setRectangle(): invalid number of arguments.";
+        m_type = invalid;
+        m_arguments.clear();
+    }
+}
+
+void Aperture::setPolygon( QList<mpq_class> arguments )
+{
+    m_arguments = arguments;
+    m_type = polygon;
+    if (arguments.size() == 2 || arguments.size() == 3)
+        m_hole = noHole;
+    else if (arguments.size() == 4)
+        m_hole = circularHole;
+    else if (arguments.size() == 5)
+        m_hole = rectangularHole;
+    else {
+        qDebug() << "Aperture::setPolygon(): invalid number of arguments.";
+        m_type = invalid;
+        m_arguments.clear();
     }
 }
 
@@ -864,6 +955,64 @@ QGraphicsItem* Aperture::getGraphicsItem() const
         }
 
         return item;
+    }
+    if (type() == oval) {
+        // obround (oval) aperture
+        if (m_arguments.size() < 2) {
+            qDebug() << "invalid oval aperture definition (too few arguments)";
+            return 0;
+        }
+        mpq_class x = m_arguments.at(0);
+        mpq_class y = m_arguments.at(1);
+        if (x == y) {
+            qDebug() << "invalid oval aperture definition (x==y)";
+            return 0;
+        }
+        x = abs(x);
+        y = abs(y);
+        QPainterPath path;
+        if (x < y) {
+            // vertical
+            mpq_class radius = x/2;
+            mpq_class length = y-x;
+            mpq_class length2 = length/2;
+            path.moveTo( radius.get_d(),  length2.get_d() );
+            path.lineTo( radius.get_d(), -length2.get_d() );
+            path.arcTo( -radius.get_d(), mpq_class(-length2-radius).get_d(), x.get_d(), x.get_d(), 0.0, 180.0 );
+            path.lineTo( -radius.get_d(), length2.get_d() );
+            path.arcTo( -radius.get_d(), mpq_class(length2-radius).get_d(), x.get_d(), x.get_d(), 180.0, 180.0 );
+            path.closeSubpath();
+        } else {
+            // horizontal
+            mpq_class radius = y/2;
+            mpq_class length = x-y;
+            mpq_class length2 = length/2;
+            path.moveTo(  length2.get_d(),  radius.get_d() );
+            path.lineTo( -length2.get_d(),  radius.get_d() );
+            path.arcTo( mpq_class(-length2-radius).get_d(), -radius.get_d(), y.get_d(), y.get_d(), -90.0, -180.0 );
+            path.lineTo(  length2.get_d(), -radius.get_d() );
+            path.arcTo( mpq_class(length2-radius).get_d(), -radius.get_d(), y.get_d(), y.get_d(), 90.0, -180.0 );
+            path.closeSubpath();
+        }
+
+        if (m_arguments.size() == 3) {
+            // circular hole
+            qreal radius = mpq_class(m_arguments.at(2) / 2).get_d();
+            path.addEllipse( QPointF(0,0), radius, radius );
+        } else if (m_arguments.size() == 4) {
+            // rectangular hole
+            qreal width  = m_arguments.at(2).get_d();
+            qreal height = m_arguments.at(3).get_d();
+            path.addRect( -width/2.0, -height/2.0, width, height );
+        } else if (m_arguments.size() > 4) {
+            qDebug() << "invalid oval aperture definition (too many arguments)";
+            return 0;
+        }
+
+        QGraphicsPathItem* pathItem = new QGraphicsPathItem(path);
+        pathItem->setBrush( pathItem->pen().color() );
+
+        return pathItem;
     }
     if (type() == macro) {
         qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";

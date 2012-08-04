@@ -46,12 +46,17 @@ protected:
 class Aperture
 {
 public:
-    enum Type {circle,rectangle,oval,polygon,macro};
+    enum Type {invalid,circle,rectangle,oval,polygon,macro};
     enum HoleType {noHole,circularHole,rectangularHole};
 
 public:
     Aperture();
     void setCircle( mpq_class diameter, mpq_class x_hole_dimension = -1, mpq_class y_hole_dimension = -1 );
+    void setCircle( QList<mpq_class> arguments );
+    void setOval( mpq_class x_length, mpq_class y_length, mpq_class x_hole_dimension = -1, mpq_class y_hole_dimension = -1 );
+    void setOval( QList<mpq_class> arguments );
+    void setRectangle( QList<mpq_class> arguments );
+    void setPolygon( QList<mpq_class> arguments );
     void setMacro( ApertureMacro macro, QList<mpq_class> arguments );
     Type type() const {return m_type;}
     mpq_class diameter() const {return m_arguments.value(0);}
