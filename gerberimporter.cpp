@@ -260,9 +260,9 @@ void GerberImporter::parameterAD( QString parameterBlock )
     if (pos != -1) {
         // parse arguments
         pos++;
-        while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.')) {
+        while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.' || aperture_str.at(pos) == '+' || aperture_str.at(pos) == '-')) {
             QString argument_str;
-            while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.')) {
+            while ((pos < aperture_str.length()) && (aperture_str.at(pos).isDigit() || aperture_str.at(pos) == '.' || aperture_str.at(pos) == '+' || aperture_str.at(pos) == '-')) {
                 argument_str += aperture_str.at(pos++);
             }
             mpq_class temp = mpq_from_decimal_string( argument_str );
@@ -1043,6 +1043,55 @@ QGraphicsItem* Aperture::getGraphicsItem() const
         pathItem->setBrush( pathItem->pen().color() );
 
         return pathItem;
+    }
+    if (type() == polygon) {
+        // regular polygon
+        if (m_arguments.size() < 2) {
+            qDebug() << "invalid polygon definition (too few arguments)";
+            return 0;
+        }
+        if (m_arguments.size() > 5) {
+            qDebug() << "invalid polygon definition (too many arguments)";
+            return 0;
+        }
+        mpq_class radius = m_arguments.at(0) / 2;
+        int numSides = m_arguments.at(1).get_d();
+        if (numSides < 2) {
+            qDebug() << "invalid polygon.";
+            return 0;
+        }
+        mpq_class rotation = 0;
+        if (m_arguments.size() >= 3)
+            rotation = m_arguments.at(2);
+
+        QPainterPath path;
+        for (int n=0; n<numSides; n++) {
+            mpq_class temp1 = rotation / mpq_class(180);
+            mpq_class radian = temp1 * M_PI;
+            mpq_class x = radius * cos(radian.get_d());
+            mpq_class y = radius * sin(radian.get_d());
+            if (n == 0)
+                path.moveTo( x.get_d(),y.get_d() );
+            else
+                path.lineTo( x.get_d(),y.get_d() );
+            rotation += mpq_class(360) / numSides;
+        }
+
+        if (m_arguments.size() == 4) {
+            // circular hole
+            qreal radius = mpq_class(m_arguments.at(3)/2).get_d();
+            path.addEllipse( QPointF(0,0), radius, radius );
+        } else if (m_arguments.size() == 5) {
+            // rectangular hole
+            qreal width  = m_arguments.at(3).get_d();
+            qreal height = m_arguments.at(4).get_d();
+            path.addRect( -width/2.0, -height/2.0, width, height );
+        }
+
+        QGraphicsPathItem* item = new QGraphicsPathItem(path);
+        item->setBrush( QBrush(item->pen().color()) );
+
+        return item;
     }
     if (type() == macro) {
 //        qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
