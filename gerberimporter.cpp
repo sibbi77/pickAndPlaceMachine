@@ -678,13 +678,13 @@ void Layer::stopOutlineFill()
     m_outlineFillPoints.clear();
 }
 
-vtkSmartPointer<vtkProp> Layer::getVtkProp( double thickness ) const
+vtkSmartPointer<vtkProp3D> Layer::getVtkProp3D( double thickness ) const
 {
-    vtkSmartPointer<vtkPropAssembly> assembly = vtkSmartPointer<vtkPropAssembly>::New();
+    vtkSmartPointer<vtkAssembly> assembly = vtkSmartPointer<vtkAssembly>::New();
     foreach (Object* object, m_objects) {
-        vtkSmartPointer<vtkProp> prop = object->getVtkProp(thickness);
-        if (prop)
-            assembly->AddPart( prop );
+        vtkSmartPointer<vtkProp3D> prop3D = object->getVtkProp3D(thickness);
+        if (prop3D)
+            assembly->AddPart( prop3D );
     }
     return assembly;
 }
@@ -703,7 +703,7 @@ QGraphicsItem* Object::getGraphicsItem() const
     return 0;
 }
 
-vtkSmartPointer<vtkProp> Object::getVtkProp( double thickness ) const
+vtkSmartPointer<vtkProp3D> Object::getVtkProp3D( double thickness ) const
 {
     return 0;
 }
@@ -732,7 +732,7 @@ QGraphicsItem* Line::getGraphicsItem() const
     return line;
 }
 
-vtkSmartPointer<vtkProp> Line::getVtkProp( double thickness ) const
+vtkSmartPointer<vtkProp3D> Line::getVtkProp3D( double thickness ) const
 {
     double x1 = m_x1.get_d();
     double y1 = m_y1.get_d();
@@ -902,7 +902,7 @@ QGraphicsItem* FilledOutline::getGraphicsItem() const
     return polygonItem;
 }
 
-vtkSmartPointer<vtkProp> FilledOutline::getVtkProp( double thickness ) const
+vtkSmartPointer<vtkProp3D> FilledOutline::getVtkProp3D( double thickness ) const
 {
     vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
     vtkSmartPointer<vtkCellArray> poly = vtkSmartPointer<vtkCellArray>::New();

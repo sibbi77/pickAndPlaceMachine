@@ -83,7 +83,7 @@ class Object
 public:
     Object();
     virtual QGraphicsItem* getGraphicsItem() const;
-    virtual vtkSmartPointer<vtkProp> getVtkProp(double thickness) const;
+    virtual vtkSmartPointer<vtkProp3D> getVtkProp3D(double thickness) const;
 };
 
 class Line : public Object
@@ -91,7 +91,7 @@ class Line : public Object
 public:
     Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture );
     virtual QGraphicsItem* getGraphicsItem() const;
-    virtual vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
+    virtual vtkSmartPointer<vtkProp3D> getVtkProp3D( double thickness ) const;
 
 protected:
     mpq_class m_x1, m_y1, m_x2, m_y2;
@@ -139,7 +139,7 @@ class FilledOutline : public Object
 public:
     FilledOutline( QList<QPair<mpq_class, mpq_class> > points );
     virtual QGraphicsItem* getGraphicsItem() const;
-    virtual vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
+    virtual vtkSmartPointer<vtkProp3D> getVtkProp3D( double thickness ) const;
 
 protected:
     QList< QPair<mpq_class,mpq_class> > m_points;
@@ -178,7 +178,7 @@ public:
     void stopOutlineFill();
 
     QList<Object*> getObjects() const {return m_objects;}
-    vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
+    vtkSmartPointer<vtkProp3D> getVtkProp3D( double thickness ) const;
 
 protected:
     mpq_class m_current_x;
