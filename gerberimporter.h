@@ -139,6 +139,7 @@ class FilledOutline : public Object
 public:
     FilledOutline( QList<QPair<mpq_class, mpq_class> > points );
     virtual QGraphicsItem* getGraphicsItem() const;
+    virtual vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
 
 protected:
     QList< QPair<mpq_class,mpq_class> > m_points;

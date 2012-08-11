@@ -11,6 +11,10 @@
 #include <vtkProperty.h>
 #include <vtkCylinderSource.h>
 #include <vtkPropAssembly.h>
+#include <vtkLinearExtrusionFilter.h>
+#include <vtkTriangleFilter.h>
+#include <vtkCellArray.h>
+#include <vtkCleanPolyData.h>
 
 
 GerberImporter::GerberImporter()
@@ -896,6 +900,50 @@ QGraphicsItem* FilledOutline::getGraphicsItem() const
     QGraphicsPolygonItem* polygonItem = new QGraphicsPolygonItem(polygon);
     polygonItem->setBrush( polygonItem->pen().color() );
     return polygonItem;
+}
+
+vtkSmartPointer<vtkProp> FilledOutline::getVtkProp( double thickness ) const
+{
+    vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+    vtkSmartPointer<vtkCellArray> poly = vtkSmartPointer<vtkCellArray>::New();
+
+    int numPoints = 0;
+    poly->InsertNextCell(0);
+    typedef QPair<mpq_class,mpq_class> Pair;
+    foreach (Pair point, m_points) {
+        int id = points->InsertNextPoint( point.first.get_d(), point.second.get_d(), 0 );
+        poly->InsertCellPoint(id);
+        numPoints++;
+    }
+    if (numPoints < 3)
+        return 0;
+    poly->InsertCellPoint(0); // close the polygon
+    poly->UpdateCellCount(++numPoints);
+
+    vtkSmartPointer<vtkPolyData> profile = vtkSmartPointer<vtkPolyData>::New();
+    profile->SetPoints(points);
+    profile->SetPolys(poly);
+
+    vtkSmartPointer<vtkCleanPolyData> cleaner = vtkSmartPointer<vtkCleanPolyData>::New();
+    cleaner->SetInput( profile );
+
+    vtkSmartPointer<vtkTriangleFilter> tf = vtkSmartPointer<vtkTriangleFilter>::New();
+    tf->SetInputConnection( cleaner->GetOutputPort() );
+
+    vtkSmartPointer<vtkLinearExtrusionFilter> extrude = vtkSmartPointer<vtkLinearExtrusionFilter>::New();
+    extrude->SetInputConnection( tf->GetOutputPort() );
+    extrude->SetExtrusionTypeToVectorExtrusion();
+    extrude->SetVector( 0, 0, thickness );
+//    extrude->CappingOn();
+
+    vtkSmartPointer<vtkPolyDataMapper> Mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    Mapper->SetInputConnection( extrude->GetOutputPort() );
+
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(Mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+
+    return actor;
 }
 
 
