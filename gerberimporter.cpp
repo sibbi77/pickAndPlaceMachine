@@ -4,6 +4,15 @@
 #include <QtGui>
 #include <cmath>
 
+#include <vtkCubeSource.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkActor.h>
+#include <vtkSmartPointer.h>
+#include <vtkProperty.h>
+#include <vtkCylinderSource.h>
+#include <vtkPropAssembly.h>
+
+
 GerberImporter::GerberImporter()
 {
 //    QList<QByteArray> l = QTextCodec::availableCodecs();
@@ -253,7 +262,7 @@ void GerberImporter::parameterAD( QString parameterBlock )
     QString aperture_str = parameterBlock.mid(pos);
     aperture_str.chop(1); // remove '*'
 
-    Aperture aperture;
+    Aperture aperture( m_MO );
     QList<mpq_class> arguments;
 
     pos = aperture_str.indexOf(',');
@@ -434,7 +443,7 @@ void GerberImporter::draw( QString dataBlock )
         setDCode( dataBlock.mid(pos) );
     }
 
-    currentLayer().draw(x,y,i,j);
+    currentLayer().draw(x,y,i,j,m_MO);
 }
 
 void GerberImporter::setDCode( QString dataBlock )
@@ -539,7 +548,20 @@ mpq_class GerberImporter::mpq_from_decimal_string( QString decimal_str, bool* co
     return result;
 }
 
-
+//! \brief Bounding rectangle.
+//! \todo use mpq_class to get an accurate bounding rect.
+QRectF GerberImporter::getDimensionsF() const
+{
+    QRectF rect;
+    foreach( Layer layer, m_layers ) {
+        QList<Object*> objects = layer.getObjects();
+        foreach (Object* object, objects) {
+            QRectF temp = object->getGraphicsItem()->boundingRect();
+            rect = rect.united( temp );
+        }
+    }
+    return rect;
+}
 
 
 
@@ -569,9 +591,21 @@ Layer::~Layer()
 
 }
 
-void Layer::draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j )
+void Layer::draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j, Unit unit )
 {
 //    qDebug() << "draw(): x=" << x.get_d() << " y=" << y.get_d() << " Aperture:" << m_aperture;
+
+    mpq_class unit_factor = 0;
+    if (unit == mm)
+        unit_factor = 1;
+    if (unit == in)
+        unit_factor = mpq_class(10) / mpq_class(254); // 1/(25.4 mm)
+
+    // this will fail, if the unit is changed within the layer (not allowed by specs)
+    x *= unit_factor;
+    y *= unit_factor;
+    i *= unit_factor;
+    j *= unit_factor;
 
     if (m_outlineFillMode == fillOff) {
         if (m_drawMode == on) {
@@ -585,11 +619,9 @@ void Layer::draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j )
                 Line* line = new Line( m_current_x, m_current_y, x, y, m_apertures.value(m_aperture) );
                 m_objects << line;
             } else if (m_interpolationMode == clockwise) {
-                qDebug() << "Layer::draw()" << x.get_d() << y.get_d() << i.get_d() << j.get_d();
                 Line_cw* line = new Line_cw( m_current_x, m_current_y, x, y, i, j, m_apertures.value(m_aperture) );
                 m_objects << line;
             } else if (m_interpolationMode == counterclockwise) {
-                qDebug() << "Layer::draw()" << x.get_d() << y.get_d() << i.get_d() << j.get_d();
                 Line_ccw* line = new Line_ccw( m_current_x, m_current_y, x, y, i, j, m_apertures.value(m_aperture) );
                 m_objects << line;
             }
@@ -642,6 +674,16 @@ void Layer::stopOutlineFill()
     m_outlineFillPoints.clear();
 }
 
+vtkSmartPointer<vtkProp> Layer::getVtkProp( double thickness ) const
+{
+    vtkSmartPointer<vtkPropAssembly> assembly = vtkSmartPointer<vtkPropAssembly>::New();
+    foreach (Object* object, m_objects) {
+        vtkSmartPointer<vtkProp> prop = object->getVtkProp(thickness);
+        if (prop)
+            assembly->AddPart( prop );
+    }
+    return assembly;
+}
 
 
 
@@ -657,13 +699,17 @@ QGraphicsItem* Object::getGraphicsItem() const
     return 0;
 }
 
-Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture )
+vtkSmartPointer<vtkProp> Object::getVtkProp( double thickness ) const
+{
+    return 0;
+}
+
+Line::Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture ) : m_aperture(aperture)
 {
     m_x1 = x1;
     m_y1 = y1;
     m_x2 = x2;
     m_y2 = y2;
-    m_aperture = aperture;
 }
 
 QGraphicsItem* Line::getGraphicsItem() const
@@ -682,7 +728,60 @@ QGraphicsItem* Line::getGraphicsItem() const
     return line;
 }
 
-Line_cw_ccw::Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture )
+vtkSmartPointer<vtkProp> Line::getVtkProp( double thickness ) const
+{
+    double x1 = m_x1.get_d();
+    double y1 = m_y1.get_d();
+    double x2 = m_x2.get_d();
+    double y2 = m_y2.get_d();
+    double diameter = m_aperture.diameter().get_d();
+    double length = sqrt( pow(x2-x1,2.0) + pow(y2-y1,2.0) );
+    double angle = atan2( y2-y1, x2-x1 );
+
+    vtkSmartPointer<vtkAssembly> assembly = vtkSmartPointer<vtkAssembly>::New();
+
+    vtkSmartPointer<vtkCubeSource> cubeSource = vtkSmartPointer<vtkCubeSource>::New();
+    cubeSource->SetBounds( 0, length, -diameter/2.0, diameter/2.0, 0, thickness );
+    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInputConnection(cubeSource->GetOutputPort());
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+    assembly->AddPart( actor );
+
+    vtkSmartPointer<vtkCylinderSource> cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
+    cylinderSource->SetHeight( thickness );
+    cylinderSource->SetRadius( diameter/2.0 );
+    cylinderSource->SetResolution(20); // FIXME cylinders in vtk are ugly!!!
+    mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInputConnection(cylinderSource->GetOutputPort());
+    actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+    actor->RotateX( 90 ); // let the axis of the cylinder point towards +z
+    actor->SetPosition( 0, 0, thickness/2.0 );
+    assembly->AddPart( actor );
+
+    cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
+    cylinderSource->SetHeight( thickness );
+    cylinderSource->SetRadius( diameter/2.0 );
+    cylinderSource->SetResolution(20); // FIXME cylinders in vtk are ugly!!!
+    mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInputConnection(cylinderSource->GetOutputPort());
+    actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+    actor->RotateX( 90 ); // let the axis of the cylinder point towards +z
+    actor->SetPosition( length, 0, thickness/2.0 );
+    assembly->AddPart( actor );
+
+    assembly->RotateZ( angle / M_PI * 180.0 );
+    assembly->SetPosition( x1, y1, 0 );
+
+    return assembly;
+}
+
+Line_cw_ccw::Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture ) : m_aperture(aperture)
 {
     m_x1 = x1;
     m_y1 = y1;
@@ -690,7 +789,6 @@ Line_cw_ccw::Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2
     m_y2 = y2;
     m_i = i;
     m_j = j;
-    m_aperture = aperture;
 }
 
 QGraphicsItem* Line_cw_ccw::getGraphicsItem( bool ccw ) const
@@ -759,11 +857,10 @@ QGraphicsItem* Line_ccw::getGraphicsItem() const
     return Line_cw_ccw::getGraphicsItem( true );
 }
 
-Flash::Flash( mpq_class x, mpq_class y, Aperture aperture )
+Flash::Flash( mpq_class x, mpq_class y, Aperture aperture ) : m_aperture(aperture)
 {
     m_x = x;
     m_y = y;
-    m_aperture = aperture;
 }
 
 QGraphicsItem* Flash::getGraphicsItem() const
@@ -808,6 +905,20 @@ Aperture::Aperture()
 {
     m_type = circle;
     m_hole = noHole;
+    m_unit = in;
+    m_unitFactor = mpq_class(10) / mpq_class(254);
+}
+
+Aperture::Aperture(Unit unit)
+{
+    m_type = circle;
+    m_hole = noHole;
+    m_unit = unit;
+    m_unitFactor = 0;
+    if (m_unit == mm)
+        m_unitFactor = 1;
+    if (m_unit == in)
+        m_unitFactor = mpq_class(10) / mpq_class(254);
 }
 
 void Aperture::setCircle( QList<mpq_class> arguments )
@@ -825,6 +936,8 @@ void Aperture::setCircle( QList<mpq_class> arguments )
         m_type = invalid;
         m_arguments.clear();
     }
+    for (int i=0; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setCircle( mpq_class diameter, mpq_class x_hole_dimension, mpq_class y_hole_dimension )
@@ -846,6 +959,9 @@ void Aperture::setCircle( mpq_class diameter, mpq_class x_hole_dimension, mpq_cl
             m_arguments << y_hole_dimension;
         }
     }
+
+    for (int i=0; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setOval( QList<mpq_class> arguments )
@@ -863,6 +979,9 @@ void Aperture::setOval( QList<mpq_class> arguments )
         m_type = invalid;
         m_arguments.clear();
     }
+
+    for (int i=0; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setOval( mpq_class x_length, mpq_class y_length, mpq_class x_hole_dimension, mpq_class y_hole_dimension )
@@ -884,6 +1003,9 @@ void Aperture::setOval( mpq_class x_length, mpq_class y_length, mpq_class x_hole
             m_arguments << y_hole_dimension;
         }
     }
+
+    for (int i=0; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setRectangle( QList<mpq_class> arguments )
@@ -901,6 +1023,9 @@ void Aperture::setRectangle( QList<mpq_class> arguments )
         m_type = invalid;
         m_arguments.clear();
     }
+
+    for (int i=0; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setPolygon( QList<mpq_class> arguments )
@@ -917,7 +1042,12 @@ void Aperture::setPolygon( QList<mpq_class> arguments )
         qDebug() << "Aperture::setPolygon(): invalid number of arguments.";
         m_type = invalid;
         m_arguments.clear();
+        return;
     }
+
+    m_arguments[0] = m_arguments[0] * m_unitFactor;
+    for (int i=3; i<m_arguments.size(); i++)
+        m_arguments[i] = m_arguments[i] * m_unitFactor;
 }
 
 void Aperture::setMacro( ApertureMacro apertureMacro, QList<mpq_class> arguments )
@@ -1094,6 +1224,8 @@ QGraphicsItem* Aperture::getGraphicsItem() const
         return item;
     }
     if (type() == macro) {
+        // FIXME the macro should be precalculated at setMacro()
+        // FIXME and the unit handling should be moved there, too
 //        qDebug() << "QGraphicsItem* Aperture::getGraphicsItem() const ## macro";
         QGraphicsItemGroup* group = new QGraphicsItemGroup;
 
@@ -1109,9 +1241,9 @@ QGraphicsItem* Aperture::getGraphicsItem() const
                     return group;
                 }
                 int exposure = primitive.value(1).get_d(); // FIXME
-                mpq_class diameter = primitive.value(2);
-                mpq_class center_x = primitive.value(3);
-                mpq_class center_y = primitive.value(4);
+                mpq_class diameter = primitive.value(2) * m_unitFactor;
+                mpq_class center_x = primitive.value(3) * m_unitFactor;
+                mpq_class center_y = primitive.value(4) * m_unitFactor;
 
                 mpq_class lower_x = center_x - diameter/mpq_class(2);
                 mpq_class lower_y = center_y - diameter/mpq_class(2);
@@ -1134,8 +1266,8 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 
                 QPolygonF poly;
                 for (int n=0; n<num; n++) {
-                    mpq_class x = primitive.value(3+2*n);
-                    mpq_class y = primitive.value(4+2*n);
+                    mpq_class x = primitive.value(3+2*n) * m_unitFactor;
+                    mpq_class y = primitive.value(4+2*n) * m_unitFactor;
                     poly << QPointF(x.get_d(),y.get_d());
                 }
                 QGraphicsPolygonItem* item = new QGraphicsPolygonItem(poly,group);
@@ -1151,9 +1283,9 @@ QGraphicsItem* Aperture::getGraphicsItem() const
                 }
                 int exposure = primitive.value(1).get_d(); // FIXME
                 int numSides = primitive.value(2).get_d();
-                mpq_class center_x = primitive.value(3);
-                mpq_class center_y = primitive.value(4);
-                mpq_class radius = primitive.value(5) / mpq_class(2);
+                mpq_class center_x = primitive.value(3) * m_unitFactor;
+                mpq_class center_y = primitive.value(4) * m_unitFactor;
+                mpq_class radius = primitive.value(5) / mpq_class(2) * m_unitFactor;
                 mpq_class rotation = primitive.value(6);
 
                 if (numSides < 2) {
@@ -1181,10 +1313,10 @@ QGraphicsItem* Aperture::getGraphicsItem() const
                     return group;
                 }
                 int exposure = primitive.value(1).get_d(); // FIXME
-                mpq_class width = primitive.value(2);
-                mpq_class height = primitive.value(3);
-                mpq_class center_x = primitive.value(4);
-                mpq_class center_y = primitive.value(5);
+                mpq_class width = primitive.value(2) * m_unitFactor;
+                mpq_class height = primitive.value(3) * m_unitFactor;
+                mpq_class center_x = primitive.value(4) * m_unitFactor;
+                mpq_class center_y = primitive.value(5) * m_unitFactor;
                 mpq_class rotation = primitive.value(6);
 
                 mpq_class lower_x = center_x-width/mpq_class(2);
@@ -1210,7 +1342,6 @@ QGraphicsItem* Aperture::getGraphicsItem() const
 
 ApertureMacro::ApertureMacro()
 {
-
 }
 
 ApertureMacro::ApertureMacro( QStringList primitives )

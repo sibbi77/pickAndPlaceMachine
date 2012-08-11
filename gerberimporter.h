@@ -6,6 +6,11 @@
 #include <gmpxx.h>
 #include <QGraphicsItem>
 
+#include <vtkAssembly.h>
+#include <vtkSmartPointer.h>
+
+enum Unit {mm,in};
+
 //! \internal
 class ApertureMacro_internalRep
 {
@@ -51,6 +56,7 @@ public:
 
 public:
     Aperture();
+    Aperture( Unit unit );
     void setCircle( mpq_class diameter, mpq_class x_hole_dimension = -1, mpq_class y_hole_dimension = -1 );
     void setCircle( QList<mpq_class> arguments );
     void setOval( mpq_class x_length, mpq_class y_length, mpq_class x_hole_dimension = -1, mpq_class y_hole_dimension = -1 );
@@ -68,6 +74,8 @@ protected:
     HoleType m_hole;
     QList<mpq_class> m_arguments;
     ApertureMacro m_macro;
+    Unit m_unit;
+    mpq_class m_unitFactor;
 };
 
 class Object
@@ -75,6 +83,7 @@ class Object
 public:
     Object();
     virtual QGraphicsItem* getGraphicsItem() const;
+    virtual vtkSmartPointer<vtkProp> getVtkProp(double thickness) const;
 };
 
 class Line : public Object
@@ -82,6 +91,7 @@ class Line : public Object
 public:
     Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture );
     virtual QGraphicsItem* getGraphicsItem() const;
+    virtual vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
 
 protected:
     mpq_class m_x1, m_y1, m_x2, m_y2;
@@ -157,7 +167,7 @@ public:
     DrawMode drawMode() const {return m_drawMode;}
     void setAperture( int aperture ) {m_aperture = aperture;}
     int aperture() const {return m_aperture;}
-    void draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j );
+    void draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j, Unit unit );
     void setX( mpq_class x ) {m_current_x = x;}
     mpq_class x() const {return m_current_x;}
     void setY( mpq_class y ) {m_current_y = y;}
@@ -167,6 +177,7 @@ public:
     void stopOutlineFill();
 
     QList<Object*> getObjects() const {return m_objects;}
+    vtkSmartPointer<vtkProp> getVtkProp( double thickness ) const;
 
 protected:
     mpq_class m_current_x;
@@ -193,6 +204,7 @@ public:
 
     bool import( QString filename );
     QList<Layer>& getLayers() {return m_layers;}
+    QRectF getDimensionsF() const;
 
     static mpq_class mpq_from_decimal_string( QString decimal_str, bool *conversion_ok = 0, int *pos_after_number = 0 );
 
@@ -225,7 +237,7 @@ protected:
     // current graphics state
     int m_FS_integer, m_FS_decimals, m_FS_decimals10;
     enum {omit_leading, omit_trailing} m_FS_zero;
-    enum {mm,in} m_MO;
+    Unit m_MO;
 
     int m_currentAperture; //!< 10-999: aperture
 };
