@@ -5,7 +5,9 @@
 #include <QTreeWidgetItem>
 
 #include <vtkRenderer.h>
+
 #include "gerberimporter.h"
+#include "centroid.h"
 
 namespace Ui {
 class MainWindow;
@@ -30,10 +32,12 @@ protected:
 
     vtkRenderer *m_vtkRenderer;
     QList<GerberImporter> m_GerberImporter;
-    QTreeWidgetItem *m_layerOutline, *m_layerTop, *m_layerBottom, *m_layerUnknown;
+    QList<Centroid> m_Centroid;
+    QTreeWidgetItem *m_layerOutline, *m_layerTop, *m_layerBottom, *m_csv, *m_layerUnknown;
 
     void updateView();
     void render( GerberImporter& importer, double zpos, double thickness );
+    void render( Centroid& centroid, double zpos_top, double zpos_bottom, double thickness );
 };
 
 #endif // MAINWINDOW_H

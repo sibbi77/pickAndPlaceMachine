@@ -1,6 +1,8 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "csvimporter.h"
+
 #include <QtCore>
 #include <QtGui>
 
@@ -33,34 +35,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->treeWidget->addTopLevelItem( m_layerTop );
     m_layerBottom = new QTreeWidgetItem(QStringList("Bottom"));
     ui->treeWidget->addTopLevelItem( m_layerBottom );
+    m_csv = new QTreeWidgetItem(QStringList("Pick&&Place"));
+    ui->treeWidget->addTopLevelItem( m_csv );
     m_layerUnknown = new QTreeWidgetItem(QStringList("Unknown"));
     ui->treeWidget->addTopLevelItem( m_layerUnknown );
-
-//    vtkCubeSource* cube = vtkCubeSource::New();
-//    vtkPolyDataMapper* mapper = vtkPolyDataMapper::New();
-//    mapper->SetInputConnection( cube->GetOutputPort() );
-//    vtkActor* actor = vtkActor::New();
-//    actor->SetMapper( mapper );
-//    m_vtkRenderer->AddViewProp( actor );
-//    m_vtkRenderer->ResetCamera();
-//    ui->qvtkWidget->GetRenderWindow()->Render();
-
-
-
-
-
-
-//    // TEST
-//    QGraphicsScene* scene = new QGraphicsScene;
-//    QPainterPath path;
-//    path.addEllipse( QPointF(0,0), 10, 10 );
-//    path.addEllipse( QPointF(1,1), 5, 5 );
-//    QGraphicsPathItem* item = new QGraphicsPathItem(path);
-//    item->setBrush( item->pen().color() );
-//    scene->addItem( item );
-
-//    ui->graphicsView->setScene(scene);
-//    ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
 }
 
 MainWindow::~MainWindow()
@@ -70,27 +48,52 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_actionImport_Gerber_triggered()
 {
-    GerberImporter importer;
     QString filename = QFileDialog::getOpenFileName( this, "Select gerber file to import" );
 
+    QFileInfo fi(filename);
+    QTreeWidgetItem* item = new QTreeWidgetItem();
+    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
+    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+
+    if (fi.suffix().toLower() == "csv") {
+        // most likely Pick&Place file
+        CSVImporter csvImporter;
+        bool ok = csvImporter.import( filename );
+        if (!ok) {
+            QMessageBox::information( this, "open centroid (pick&place) file", "Cannot open csv file." );
+            return;
+        }
+        Centroid centroid;
+        ok = centroid.analyze( csvImporter.csv() );
+        if (!ok) {
+            // automatic column determination failed; let the user assign the colunms
+            QMessageBox::information( this, "open centroid (pick&place) file", "Manual column assignment." );
+            return;
+        }
+
+        m_Centroid << centroid;
+        int id = m_Centroid.size() - 1;
+        item->setData( 0, Qt::UserRole, id );
+
+        m_csv->addChild(item);
+        updateView();
+        return;
+    }
+
+    GerberImporter importer;
     bool ok = importer.import( filename );
     if (!ok)
         return;
 
     m_GerberImporter << importer;
     int id = m_GerberImporter.size() - 1;
-
-    QFileInfo fi(filename);
-    QTreeWidgetItem* item = new QTreeWidgetItem();
-    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
-    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
     item->setData( 0, Qt::UserRole, id );
 
     if (fi.suffix().toLower() == "outline") {
         m_layerOutline->addChild(item);
-    } else if (fi.suffix().toLower() == "top") {
+    } else if ((fi.suffix().toLower() == "top") || (fi.suffix().toLower() == "positop")) {
         m_layerTop->addChild(item);
-    } else if (fi.suffix().toLower() == "bot") {
+    } else if ((fi.suffix().toLower() == "bot") || (fi.suffix().toLower() == "posibot")) {
         m_layerBottom->addChild(item);
     } else {
         m_layerUnknown->addChild(item);
@@ -146,6 +149,18 @@ void MainWindow::updateView()
         GerberImporter& importer = m_GerberImporter[m_layerBottom->child(i)->data(0,Qt::UserRole).toInt()];
         render( importer, -laminateHeight - thickness, thickness );
     }
+
+    for (int i=0; i<m_csv->childCount(); i++) {
+        Centroid& centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
+        render( centroid, 0, -laminateHeight, thickness );
+    }
+
+    // rescale 2D view
+    ui->graphicsView->fitInView( m_scene->sceneRect(), Qt::KeepAspectRatio );
+
+    // rescale 3D view
+    m_vtkRenderer->ResetCamera();
+    ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
 void MainWindow::render( GerberImporter& importer, double zpos, double thickness )
@@ -164,8 +179,6 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
         }
     }
 
-    ui->graphicsView->fitInView( m_scene->sceneRect(), Qt::KeepAspectRatio );
-
     //
     // draw 3D image
     //
@@ -183,7 +196,24 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
 //            m_vtkRenderer->AddViewProp( object->getVtkActor() );
 //        }
     }
+}
 
-    m_vtkRenderer->ResetCamera();
-    ui->qvtkWidget->GetRenderWindow()->Render();
+void MainWindow::render( Centroid& centroid, double zpos_top, double zpos_bottom, double thickness )
+{
+    QList<CentroidLine> lines = centroid.lines();
+
+    //
+    // draw 2D
+    //
+    for (int i=0; i<lines.size(); i++) {
+        CentroidLine line = lines.at(i);
+
+        QRectF r;
+        r.setSize( QSizeF(1e-3,1e-3) );
+        r.moveCenter( QPointF(line.x.get_d(),line.y.get_d()) );
+        QGraphicsEllipseItem *item = new QGraphicsEllipseItem(r);
+        item->setPen( QPen("red") );
+        item->setBrush( QBrush("red") );
+        m_scene->addItem( item );
+    }
 }

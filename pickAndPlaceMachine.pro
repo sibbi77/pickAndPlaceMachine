@@ -20,9 +20,13 @@ LIBS += -lgmpxx -lgmp
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    gerberimporter.cpp
+    gerberimporter.cpp \
+    csvimporter.cpp \
+    centroid.cpp
 
 HEADERS  += mainwindow.h \
-    gerberimporter.h
+    gerberimporter.h \
+    csvimporter.h \
+    centroid.h
 
 FORMS    += mainwindow.ui
