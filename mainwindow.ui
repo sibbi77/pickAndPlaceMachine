@@ -31,6 +31,9 @@
            <enum>Qt::Horizontal</enum>
           </property>
           <widget class="QTreeWidget" name="treeWidget">
+           <property name="contextMenuPolicy">
+            <enum>Qt::CustomContextMenu</enum>
+           </property>
            <column>
             <property name="text">
              <string notr="true">1</string>

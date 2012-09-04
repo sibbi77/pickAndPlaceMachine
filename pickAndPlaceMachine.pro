@@ -22,11 +22,14 @@ SOURCES += main.cpp\
         mainwindow.cpp \
     gerberimporter.cpp \
     csvimporter.cpp \
-    centroid.cpp
+    centroid.cpp \
+    centroiddialog.cpp
 
 HEADERS  += mainwindow.h \
     gerberimporter.h \
     csvimporter.h \
-    centroid.h
+    centroid.h \
+    centroiddialog.h
 
-FORMS    += mainwindow.ui
+FORMS    += mainwindow.ui \
+    centroiddialog.ui

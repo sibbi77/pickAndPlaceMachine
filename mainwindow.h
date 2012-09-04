@@ -24,6 +24,8 @@ public:
 private slots:
     void on_actionImport_Gerber_triggered();
 
+    void on_treeWidget_customContextMenuRequested(const QPoint &pos);
+
 private:
     Ui::MainWindow *ui;
 

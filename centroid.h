@@ -19,7 +19,7 @@ public:
     Centroid();
     bool analyze( QList<QStringList> csv, QHash<QString,int> *columnGuess = 0 );
     void assignColumns( QList<QStringList> csv, QHash<QString,int> columns );
-    QStringList columns() const { return QStringList() << "RefDes" << "Description" << "Value" << "X" << "Y" << "Rotation" << "Side"; }
+    static QStringList columns() { return QStringList() << "RefDes" << "Description" << "Value" << "X" << "Y" << "Rotation" << "Side"; }
     QList<CentroidLine> lines() const { return m_lines; }
 
 protected:

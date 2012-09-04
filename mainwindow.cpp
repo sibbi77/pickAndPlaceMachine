@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "csvimporter.h"
+#include "centroiddialog.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -35,7 +36,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->treeWidget->addTopLevelItem( m_layerTop );
     m_layerBottom = new QTreeWidgetItem(QStringList("Bottom"));
     ui->treeWidget->addTopLevelItem( m_layerBottom );
-    m_csv = new QTreeWidgetItem(QStringList("Pick&&Place"));
+    m_csv = new QTreeWidgetItem(QStringList("Pick&Place"));
     ui->treeWidget->addTopLevelItem( m_csv );
     m_layerUnknown = new QTreeWidgetItem(QStringList("Unknown"));
     ui->treeWidget->addTopLevelItem( m_layerUnknown );
@@ -64,16 +65,22 @@ void MainWindow::on_actionImport_Gerber_triggered()
             return;
         }
         Centroid centroid;
-        ok = centroid.analyze( csvImporter.csv() );
+        QHash<QString, int> columnGuess;
+        ok = centroid.analyze( csvImporter.csv(), &columnGuess );
         if (!ok) {
             // automatic column determination failed; let the user assign the colunms
             QMessageBox::information( this, "open centroid (pick&place) file", "Manual column assignment." );
+            CentroidDialog dlg;
+            dlg.setCSV( csvImporter.csv(), &columnGuess );
+            dlg.exec();
             return;
         }
 
         m_Centroid << centroid;
         int id = m_Centroid.size() - 1;
         item->setData( 0, Qt::UserRole, id );
+        item->setData( 0, Qt::UserRole+1, 1 ); // Pick&Place file
+        item->setData( 0, Qt::UserRole+2, filename );
 
         m_csv->addChild(item);
         updateView();
@@ -88,6 +95,7 @@ void MainWindow::on_actionImport_Gerber_triggered()
     m_GerberImporter << importer;
     int id = m_GerberImporter.size() - 1;
     item->setData( 0, Qt::UserRole, id );
+    item->setData( 0, Qt::UserRole+1, 0 ); // Gerber file
 
     if (fi.suffix().toLower() == "outline") {
         m_layerOutline->addChild(item);
@@ -215,5 +223,21 @@ void MainWindow::render( Centroid& centroid, double zpos_top, double zpos_bottom
         item->setPen( QPen("red") );
         item->setBrush( QBrush("red") );
         m_scene->addItem( item );
+    }
+}
+
+void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
+{
+    QTreeWidgetItem* item = ui->treeWidget->itemAt(pos);
+    if (!item)
+        return;
+    int id = item->data(0,Qt::UserRole).toInt();
+    if (item->data(0,Qt::UserRole+1) == 1) {
+        // Pick&Place file
+        CSVImporter importer;
+        importer.import( item->data(0,Qt::UserRole+2).toString() );
+        CentroidDialog dlg;
+        dlg.setCSV( importer.csv() );
+        dlg.exec();
     }
 }
