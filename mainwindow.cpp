@@ -44,12 +44,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
 MainWindow::~MainWindow()
 {
+    qDeleteAll(m_Centroid);
+    m_Centroid.clear();
+
     delete ui;
 }
 
 void MainWindow::on_actionImport_Gerber_triggered()
 {
-    QString filename = QFileDialog::getOpenFileName( this, "Select gerber file to import" );
+    QString filename = QFileDialog::getOpenFileName( this, "Select a file to import" );
 
     QFileInfo fi(filename);
     QTreeWidgetItem* item = new QTreeWidgetItem();
@@ -64,14 +67,13 @@ void MainWindow::on_actionImport_Gerber_triggered()
             QMessageBox::information( this, "open centroid (pick&place) file", "Cannot open csv file." );
             return;
         }
-        Centroid centroid;
-        QHash<QString, int> columnGuess;
-        ok = centroid.analyze( csvImporter.csv(), &columnGuess );
+        Centroid* centroid = new Centroid;
+        ok = centroid->analyze( csvImporter.csv() );
         if (!ok) {
             // automatic column determination failed; let the user assign the colunms
             QMessageBox::information( this, "open centroid (pick&place) file", "Manual column assignment." );
             CentroidDialog dlg;
-            dlg.setCSV( csvImporter.csv(), &columnGuess );
+            dlg.setCSV( centroid );
             dlg.exec();
             return;
         }
@@ -159,7 +161,7 @@ void MainWindow::updateView()
     }
 
     for (int i=0; i<m_csv->childCount(); i++) {
-        Centroid& centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
+        Centroid* centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
         render( centroid, 0, -laminateHeight, thickness );
     }
 
@@ -206,9 +208,12 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
     }
 }
 
-void MainWindow::render( Centroid& centroid, double zpos_top, double zpos_bottom, double thickness )
+void MainWindow::render( Centroid* centroid, double zpos_top, double zpos_bottom, double thickness )
 {
-    QList<CentroidLine> lines = centroid.lines();
+    if (!centroid)
+        return;
+
+    QList<CentroidLine> lines = centroid->lines();
 
     //
     // draw 2D
@@ -234,10 +239,10 @@ void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
     int id = item->data(0,Qt::UserRole).toInt();
     if (item->data(0,Qt::UserRole+1) == 1) {
         // Pick&Place file
-        CSVImporter importer;
-        importer.import( item->data(0,Qt::UserRole+2).toString() );
+//        CSVImporter importer;
+//        importer.import( item->data(0,Qt::UserRole+2).toString() );
         CentroidDialog dlg;
-        dlg.setCSV( importer.csv() );
+        dlg.setCSV( m_Centroid.at(id) );
         dlg.exec();
     }
 }

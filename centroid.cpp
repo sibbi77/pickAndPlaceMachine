@@ -4,14 +4,22 @@
 
 Centroid::Centroid()
 {
+    m_rowCount = 0;
+    m_columnCount = 0;
+    m_unit = UnitInch;
 }
 
 //! \brief Analyze the \c csv and try to determine the meaning of the columns.
-bool Centroid::analyze( QList<QStringList> csv, QHash<QString, int> *columnGuess )
+//! The csv content is stored in this object.
+bool Centroid::analyze( QList<QStringList> csv )
 {
+    m_data = csv;
+    m_rowCount = csv.size();
+    m_columnCount = 0;
+    for (int r=0; r<m_rowCount; r++)
+        m_columnCount = std::max( m_columnCount, csv.at(r).size() );
+
     QHash<QString,int> temp;
-    if (columnGuess == 0)
-        columnGuess = &temp;
 
     int col_RefDes = -1;
     int col_Desc = -1;
@@ -79,18 +87,48 @@ bool Centroid::analyze( QList<QStringList> csv, QHash<QString, int> *columnGuess
     qDebug() << remaining_columns;
 
 
+    // fill detected columns
+    QStringList unassigned;
+    m_headers.clear();
+    for (int i=0; i<columns().size(); i++)
+        m_headers << QString();
+    if (col_RefDes != -1)
+        m_headers[col_RefDes] = columns().at(0);
+    else
+        unassigned << columns().at(0);
+    if (col_Desc != -1)
+        m_headers[col_Desc] = columns().at(1);
+    else
+        unassigned << columns().at(1);
+    if (col_Value != -1)
+        m_headers[col_Value] = columns().at(2);
+    else
+        unassigned << columns().at(2);
+    if (col_x != -1)
+        m_headers[col_x] = columns().at(3);
+    else
+        unassigned << columns().at(3);
+    if (col_y != -1)
+        m_headers[col_y] = columns().at(4);
+    else
+        unassigned << columns().at(4);
+    if (col_rotation != -1)
+        m_headers[col_rotation] = columns().at(5);
+    else
+        unassigned << columns().at(5);
+    if (col_Side != -1)
+        m_headers[col_Side] = columns().at(6);
+    else
+        unassigned << columns().at(6);
 
-    QStringList cols = columns();
-    (*columnGuess)[cols[0]] = col_RefDes;
-    (*columnGuess)[cols[1]] = col_Desc;
-    (*columnGuess)[cols[2]] = col_Value;
-    (*columnGuess)[cols[3]] = col_x;
-    (*columnGuess)[cols[4]] = col_y;
-    (*columnGuess)[cols[5]] = col_rotation;
-    (*columnGuess)[cols[6]] = col_Side;
+    for (int i=0; i<m_headers.size(); i++) {
+        if (m_headers.at(i).isEmpty() && !unassigned.isEmpty())
+            m_headers[i] = unassigned.takeFirst();
+    }
 
-    // assign the determined columns
-    assignColumns( csv, *columnGuess );
+    emit dataChanged( index(0,0), index(m_rowCount-1,m_columnCount-1) );
+    emit headerDataChanged( Qt::Horizontal, 0, m_columnCount );
+    emit headerDataChanged( Qt::Vertical, 0, m_rowCount );
 
     return true;
 }
@@ -130,4 +168,92 @@ void Centroid::assignColumns( QList<QStringList> csv, QHash<QString,int> columns
         if (idx >= 0)
             line.side = csv.at(r).value(idx);
     }
+}
+
+
+
+//
+// QAbstractTableModel interface
+//
+
+int Centroid::rowCount(const QModelIndex &parent) const
+{
+    return m_rowCount;
+}
+
+int Centroid::columnCount(const QModelIndex &parent) const
+{
+    return m_columnCount;
+}
+
+QVariant Centroid::data( const QModelIndex& index, int role ) const
+{
+    int row = index.row();
+    int col = index.column();
+
+    if (!index.isValid() || row>=m_rowCount || col>=m_columnCount)
+        return QVariant();
+
+    if (role != Qt::DisplayRole)
+        return QVariant();
+
+    return m_data.at(row).value(col);
+}
+
+QVariant Centroid::headerData( int section, Qt::Orientation orientation, int role ) const
+{
+    if (role != Qt::DisplayRole)
+        return QVariant();
+
+    if (orientation == Qt::Vertical) {
+        return section+1;
+    } else {
+        return m_headers.value(section);
+    }
+}
+
+
+
+
+
+
+void Centroid::reassignColumn( int oldVisualIndex, int newVisualIndex )
+{
+    if (oldVisualIndex < 0 || newVisualIndex < 0)
+        return;
+    if (oldVisualIndex >= m_headers.size() || newVisualIndex >= m_headers.size())
+        return;
+
+    QStringList temp = m_headers;
+    m_headers[newVisualIndex] = temp.value(oldVisualIndex);
+    m_headers[oldVisualIndex] = temp.value(newVisualIndex);
+
+    emit headerDataChanged( Qt::Horizontal, 0, m_columnCount );
+}
+
+QList<CentroidLine> Centroid::lines() const
+{
+    QList<CentroidLine> lines;
+
+    int idx_RefDes = m_headers.indexOf( columns().value(0) );
+    int idx_Desc   = m_headers.indexOf( columns().value(1) );
+    int idx_Value  = m_headers.indexOf( columns().value(2) );
+    int idx_x      = m_headers.indexOf( columns().value(3) );
+    int idx_y      = m_headers.indexOf( columns().value(4) );
+    int idx_rotation = m_headers.indexOf( columns().value(5) );
+    int idx_Side   = m_headers.indexOf( columns().value(6) );
+
+    foreach (QStringList data, m_data) {
+        CentroidLine line;
+        line.RefDes      = data.value( idx_RefDes );
+        line.Description = data.value( idx_Desc );
+        line.Value       = data.value( idx_Value );
+        line.x           = data.value( idx_x ).toDouble(); // FIXME convert into mpq_class!
+        line.y           = data.value( idx_y ).toDouble(); // FIXME convert into mpq_class!
+        line.rotation    = data.value( idx_rotation ).toDouble(); // FIXME convert into mpq_class!
+        line.side        = data.value( idx_Side );
+        lines << line;
+    }
+
+    return lines;
 }

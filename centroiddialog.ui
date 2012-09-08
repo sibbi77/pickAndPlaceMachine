@@ -40,7 +40,7 @@
     </layout>
    </item>
    <item>
-    <widget class="QTableWidget" name="tableWidget">
+    <widget class="QTableView" name="tableView">
      <property name="selectionMode">
       <enum>QAbstractItemView::SingleSelection</enum>
      </property>

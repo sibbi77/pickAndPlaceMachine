@@ -1,7 +1,7 @@
 #ifndef CENTROIDDIALOG_H
 #define CENTROIDDIALOG_H
 
-#include "csvimporter.h"
+#include "centroid.h"
 #include <QDialog>
 
 namespace Ui {
@@ -15,10 +15,16 @@ class CentroidDialog : public QDialog
 public:
     explicit CentroidDialog(QWidget *parent = 0);
     ~CentroidDialog();
-    void setCSV( QList<QStringList> csv, QHash<QString, int> *columnGuess = 0 );
+    void setCSV( Centroid *centroid );
     
 private:
     Ui::CentroidDialog *ui;
+
+protected:
+    Centroid* m_model;
+
+protected slots:
+    void onSectionMoved(  int logicalIndex, int oldVisualIndex, int newVisualIndex );
 };
 
 #endif // CENTROIDDIALOG_H

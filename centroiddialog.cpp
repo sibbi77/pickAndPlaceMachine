@@ -1,10 +1,16 @@
-#include "centroid.h"
 #include "centroiddialog.h"
 #include "ui_centroiddialog.h"
+
+#include <QtCore>
 
 CentroidDialog::CentroidDialog(QWidget *parent) : QDialog(parent), ui(new Ui::CentroidDialog)
 {
     ui->setupUi(this);
+
+    // enable assignment of column headers to columns
+    ui->tableView->horizontalHeader()->setMovable( true );
+    ui->tableView->horizontalHeader()->setDropIndicatorShown( true );
+    connect( ui->tableView->horizontalHeader(), SIGNAL(sectionMoved(int,int,int)), SLOT(onSectionMoved(int,int,int)) );
 }
 
 CentroidDialog::~CentroidDialog()
@@ -12,25 +18,27 @@ CentroidDialog::~CentroidDialog()
     delete ui;
 }
 
-void CentroidDialog::setCSV( QList<QStringList> csv, QHash<QString, int> *columnGuess )
+void CentroidDialog::setCSV( Centroid* centroid )
 {
-    int columnCount = 0;
-    int rowCount = csv.size();
-    for (int r=0; r<rowCount; r++)
-        columnCount = std::max(columnCount,csv.at(r).size());
-    ui->tableWidget->setColumnCount(columnCount);
-    ui->tableWidget->setRowCount(rowCount);
-    ui->tableWidget->setHorizontalHeaderLabels( Centroid::columns() );
+    m_model = centroid;
+    ui->tableView->setModel( m_model );
+//    m_model.setCSV( csv, columnGuess );
+}
 
-    QStringList verticalHeaders;
-    for (int r=0; r<rowCount; r++) {
-        verticalHeaders << QString::number(r);
+void CentroidDialog::onSectionMoved( int logicalIndex, int oldVisualIndex, int newVisualIndex )
+{
+    // the view already rearranged the column => revert the movement of the column and move the header alone
+    static bool inside = false;
 
-        for (int c=0; c<columnCount; c++) {
-            QTableWidgetItem *item = new QTableWidgetItem;
-            item->setText( csv.at(r).value(c) );
-            ui->tableWidget->setItem( r, c, item );
-        }
+    if (inside)
+        qDebug() << "inside" << logicalIndex << oldVisualIndex << newVisualIndex;
+    else
+        qDebug() << "outside" << logicalIndex << oldVisualIndex << newVisualIndex;
+
+    if (!inside) {
+        inside = true;
+        ui->tableView->horizontalHeader()->moveSection( newVisualIndex, oldVisualIndex );
+        inside = false;
+        m_model->reassignColumn( oldVisualIndex, newVisualIndex );
     }
-    ui->tableWidget->setVerticalHeaderLabels( verticalHeaders );
 }
