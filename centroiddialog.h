@@ -25,6 +25,8 @@ protected:
 
 protected slots:
     void onSectionMoved(  int logicalIndex, int oldVisualIndex, int newVisualIndex );
+private slots:
+    void on_buttonBox_accepted();
 };
 
 #endif // CENTROIDDIALOG_H

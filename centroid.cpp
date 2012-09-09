@@ -6,7 +6,7 @@ Centroid::Centroid()
 {
     m_rowCount = 0;
     m_columnCount = 0;
-    m_unit = UnitInch;
+    m_unit = mpq_class(254) / mpq_class(100000) / mpq_class(1000); // UnitMils
 }
 
 //! \brief Analyze the \c csv and try to determine the meaning of the columns.
@@ -248,12 +248,36 @@ QList<CentroidLine> Centroid::lines() const
         line.RefDes      = data.value( idx_RefDes );
         line.Description = data.value( idx_Desc );
         line.Value       = data.value( idx_Value );
-        line.x           = data.value( idx_x ).toDouble(); // FIXME convert into mpq_class!
-        line.y           = data.value( idx_y ).toDouble(); // FIXME convert into mpq_class!
+        line.x           = data.value( idx_x ).toDouble() * m_unit; // FIXME convert into mpq_class!
+        line.y           = data.value( idx_y ).toDouble() * m_unit; // FIXME convert into mpq_class!
         line.rotation    = data.value( idx_rotation ).toDouble(); // FIXME convert into mpq_class!
         line.side        = data.value( idx_Side );
         lines << line;
     }
 
     return lines;
+}
+
+void Centroid::setUnit( Unit unit )
+{
+    switch (unit) {
+    case UnitMm:
+        m_unit = mpq_class(1) / mpq_class(1000);
+        break;
+    case UnitInch:
+        m_unit = mpq_class(254) / mpq_class(100) / mpq_class(1000);
+        break;
+    case UnitMils:
+        m_unit = mpq_class(254) / mpq_class(100000) / mpq_class(1000);
+        break;
+    }
+}
+
+Centroid::Unit Centroid::unit() const
+{
+    if (m_unit == mpq_class(1) / mpq_class(1000))
+        return UnitMm;
+    if (m_unit == mpq_class(254) / mpq_class(100) / mpq_class(1000))
+        return UnitInch;
+    return UnitMils;
 }

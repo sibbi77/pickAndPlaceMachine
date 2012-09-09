@@ -81,7 +81,7 @@ void MainWindow::on_actionImport_Gerber_triggered()
         m_Centroid << centroid;
         int id = m_Centroid.size() - 1;
         item->setData( 0, Qt::UserRole, id );
-        item->setData( 0, Qt::UserRole+1, 1 ); // Pick&Place file
+        item->setData( 0, Qt::UserRole+1, Type_PickPlaceFile ); // Pick&Place file
         item->setData( 0, Qt::UserRole+2, filename );
 
         m_csv->addChild(item);
@@ -97,7 +97,7 @@ void MainWindow::on_actionImport_Gerber_triggered()
     m_GerberImporter << importer;
     int id = m_GerberImporter.size() - 1;
     item->setData( 0, Qt::UserRole, id );
-    item->setData( 0, Qt::UserRole+1, 0 ); // Gerber file
+    item->setData( 0, Qt::UserRole+1, Type_GerberFile ); // Gerber file
 
     if (fi.suffix().toLower() == "outline") {
         m_layerOutline->addChild(item);
@@ -161,8 +161,8 @@ void MainWindow::updateView()
     }
 
     for (int i=0; i<m_csv->childCount(); i++) {
-        Centroid* centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
-        render( centroid, 0, -laminateHeight, thickness );
+        //Centroid* centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
+        render_Centroid( m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -laminateHeight, thickness );
     }
 
     // rescale 2D view
@@ -208,18 +208,37 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
     }
 }
 
-void MainWindow::render( Centroid* centroid, double zpos_top, double zpos_bottom, double thickness )
+void MainWindow::render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness )
 {
-    if (!centroid)
+    if (num < 0 || num >= m_Centroid.size())
         return;
 
+    Centroid* centroid = m_Centroid.at(num);
     QList<CentroidLine> lines = centroid->lines();
 
     //
     // draw 2D
     //
+
+    QGraphicsItemGroup* group = new QGraphicsItemGroup;
+    group->setData(0,Type_PickPlaceFile);
+    group->setData(1,num);
+
+    // delete previous rendering
+    QList<QGraphicsItem*> items = m_scene->items();
+    QMutableListIterator<QGraphicsItem*> it(items);
+    while (it.hasNext()) {
+        QGraphicsItem* item = it.next();
+        if (item && !item->data(0).isNull() && (item->data(0).toInt() == Type_PickPlaceFile) && (item->data(1).toInt() == num)) {
+            delete item;
+            break;
+        }
+    }
+
     for (int i=0; i<lines.size(); i++) {
         CentroidLine line = lines.at(i);
+
+        qDebug() << line.RefDes << line.Description << line.Value << line.x.get_d() << line.y.get_d() << line.rotation.get_d();
 
         QRectF r;
         r.setSize( QSizeF(1e-3,1e-3) );
@@ -227,8 +246,10 @@ void MainWindow::render( Centroid* centroid, double zpos_top, double zpos_bottom
         QGraphicsEllipseItem *item = new QGraphicsEllipseItem(r);
         item->setPen( QPen("red") );
         item->setBrush( QBrush("red") );
-        m_scene->addItem( item );
+        group->addToGroup( item );
     }
+
+    m_scene->addItem( group );
 }
 
 void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
@@ -237,7 +258,7 @@ void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
     if (!item)
         return;
     int id = item->data(0,Qt::UserRole).toInt();
-    if (item->data(0,Qt::UserRole+1) == 1) {
+    if (item->data(0,Qt::UserRole+1) == Type_PickPlaceFile) {
         // Pick&Place file
 //        CSVImporter importer;
 //        importer.import( item->data(0,Qt::UserRole+2).toString() );

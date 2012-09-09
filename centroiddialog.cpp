@@ -22,7 +22,13 @@ void CentroidDialog::setCSV( Centroid* centroid )
 {
     m_model = centroid;
     ui->tableView->setModel( m_model );
-//    m_model.setCSV( csv, columnGuess );
+    Centroid::Unit unit = centroid->unit();
+    if (unit == Centroid::UnitMm)
+        ui->comboBox->setCurrentIndex(0);
+    else if (unit == Centroid::UnitInch)
+        ui->comboBox->setCurrentIndex(1);
+    else
+        ui->comboBox->setCurrentIndex(2);
 }
 
 void CentroidDialog::onSectionMoved( int logicalIndex, int oldVisualIndex, int newVisualIndex )
@@ -41,4 +47,15 @@ void CentroidDialog::onSectionMoved( int logicalIndex, int oldVisualIndex, int n
         inside = false;
         m_model->reassignColumn( oldVisualIndex, newVisualIndex );
     }
+}
+
+void CentroidDialog::on_buttonBox_accepted()
+{
+    Centroid::Unit unit = Centroid::UnitMils;
+    if (ui->comboBox->currentIndex() == 0)
+        unit == Centroid::UnitMm;
+    else if (ui->comboBox->currentIndex() == 1)
+        unit == Centroid::UnitInch;
+
+    m_model->setUnit( unit );
 }

@@ -19,7 +19,7 @@ class Centroid : public QAbstractTableModel
     Q_OBJECT
 
 public:
-    enum Unit {UnitInch,UnitMm};
+    enum Unit {UnitInch,UnitMm,UnitMils};
     Centroid();
     bool analyze( QList<QStringList> csv );
     void assignColumns( QList<QStringList> csv, QHash<QString,int> columns );
@@ -34,6 +34,8 @@ public:
 
     void setCSV( QList<QStringList> csv, QHash<QString, int> *columnGuess = 0 );
     void reassignColumn( int oldVisualIndex, int newVisualIndex );
+    void setUnit( Unit unit );
+    Unit unit() const;
 
 //protected:
 //    QList<CentroidLine> m_lines;
@@ -42,7 +44,7 @@ protected:
     QList<QStringList> m_data;
     QStringList m_headers;
     int m_rowCount, m_columnCount;
-    Unit m_unit;
+    mpq_class m_unit;
 };
 
 

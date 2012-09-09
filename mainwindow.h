@@ -30,6 +30,8 @@ private:
     Ui::MainWindow *ui;
 
 protected:
+    enum Type {Type_GerberFile, Type_PickPlaceFile};
+
     QGraphicsScene* m_scene;
 
     vtkRenderer *m_vtkRenderer;
@@ -39,7 +41,7 @@ protected:
 
     void updateView();
     void render( GerberImporter& importer, double zpos, double thickness );
-    void render( Centroid* centroid, double zpos_top, double zpos_bottom, double thickness );
+    void render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness );
 };
 
 #endif // MAINWINDOW_H
