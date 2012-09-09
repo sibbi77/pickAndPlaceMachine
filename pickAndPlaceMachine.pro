@@ -33,3 +33,6 @@ HEADERS  += mainwindow.h \
 
 FORMS    += mainwindow.ui \
     centroiddialog.ui
+
+RESOURCES += \
+    pickAndPlaceMachine.qrc

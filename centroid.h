@@ -21,7 +21,7 @@ class Centroid : public QAbstractTableModel
 public:
     enum Unit {UnitInch,UnitMm,UnitMils};
     Centroid();
-    bool analyze( QList<QStringList> csv );
+    bool analyze( QString filename );
     void assignColumns( QList<QStringList> csv, QHash<QString,int> columns );
     static QStringList columns() { return QStringList() << "RefDes" << "Description" << "Value" << "X" << "Y" << "Rotation" << "Side"; }
     QList<CentroidLine> lines() const;
@@ -36,15 +36,20 @@ public:
     void reassignColumn( int oldVisualIndex, int newVisualIndex );
     void setUnit( Unit unit );
     Unit unit() const;
-
-//protected:
-//    QList<CentroidLine> m_lines;
+    QString filename() const {return m_filename;}
+    void setSeparator( QString separator ) {m_csvSeparator = separator;}
+    QString separator() const {return m_csvSeparator;}
 
 protected:
-    QList<QStringList> m_data;
-    QStringList m_headers;
-    int m_rowCount, m_columnCount;
-    mpq_class m_unit;
+    QString m_filename; //!< original filename of csv file
+    QString m_csvSeparator; //!< column separator in csv file (default: ",")
+
+    QList<QStringList> m_data; //!< interpreted data from csv file
+    QStringList m_headers; //!< column names and meaning
+    int m_rowCount, m_columnCount; //!< row and column count of m_data (stored for speed up)
+    mpq_class m_unit; //!< factor to calculate the position in m from the values in the csv
+
+    bool analyze( QList<QStringList> csv );
 };
 
 

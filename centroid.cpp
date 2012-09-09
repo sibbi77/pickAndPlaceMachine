@@ -1,4 +1,5 @@
 #include "centroid.h"
+#include "csvimporter.h"
 
 #include <QtCore>
 
@@ -7,6 +8,20 @@ Centroid::Centroid()
     m_rowCount = 0;
     m_columnCount = 0;
     m_unit = mpq_class(254) / mpq_class(100000) / mpq_class(1000); // UnitMils
+    m_csvSeparator = ",";
+}
+
+//! \brief Analyze the csv file \c filename and try to determine the meaning of the columns.
+//! The csv content and filename is stored in this object.
+bool Centroid::analyze( QString filename )
+{
+    m_filename = filename;
+    CSVImporter csvImporter;
+    bool ok = csvImporter.import( filename, m_csvSeparator );
+    if (!ok)
+        return false;
+
+    return analyze( csvImporter.csv() );
 }
 
 //! \brief Analyze the \c csv and try to determine the meaning of the columns.
@@ -15,6 +30,7 @@ bool Centroid::analyze( QList<QStringList> csv )
 {
     m_data = csv;
     m_rowCount = csv.size();
+    // determine number of columns in csv
     m_columnCount = 0;
     for (int r=0; r<m_rowCount; r++)
         m_columnCount = std::max( m_columnCount, csv.at(r).size() );
@@ -29,17 +45,12 @@ bool Centroid::analyze( QList<QStringList> csv )
     int col_rotation = -1;
     int col_Side = -1;
 
-    // determine number of columns in csv
-    int max_columns = 0;
-    for (int r=0; r<csv.size(); r++)
-        max_columns = std::max( max_columns, csv.at(r).size() );
-
     QList<int> remaining_columns;
-    for (int c=0; c<max_columns; c++)
+    for (int c=0; c<m_columnCount; c++)
         remaining_columns << c;
 
     // determine column for side
-    for (int c=0; c<max_columns; c++) {
+    for (int c=0; c<m_columnCount; c++) {
         for (int r=0; r<csv.size(); r++) {
             if ((csv.at(r).value(c).toLower() == "top") || (csv.at(r).value(c).toLower() == "bottom")) {
                 col_Side = c;
@@ -54,7 +65,7 @@ bool Centroid::analyze( QList<QStringList> csv )
     // determine columns for x, y, rotation
     // expect x, y, rotation in this sequence
     QList<int> idx;
-    for (int c=0; c<max_columns-2; c++) {
+    for (int c=0; c<m_columnCount-2; c++) {
         if (!remaining_columns.contains(c) || !remaining_columns.contains(c+1) || !remaining_columns.contains(c+2))
             break;
         idx << c; // assuming column c, c+1 and c+2 obey the rules
@@ -248,13 +259,13 @@ QList<CentroidLine> Centroid::lines() const
         line.RefDes      = data.value( idx_RefDes );
         line.Description = data.value( idx_Desc );
         line.Value       = data.value( idx_Value );
-        line.x           = data.value( idx_x ).toDouble() * m_unit; // FIXME convert into mpq_class!
-        line.y           = data.value( idx_y ).toDouble() * m_unit; // FIXME convert into mpq_class!
+        line.x           = data.value( idx_x ).toDouble() * m_unit.get_d(); // FIXME convert into mpq_class!
+        line.y           = data.value( idx_y ).toDouble() * m_unit.get_d(); // FIXME convert into mpq_class!
         line.rotation    = data.value( idx_rotation ).toDouble(); // FIXME convert into mpq_class!
         line.side        = data.value( idx_Side );
         lines << line;
     }
-
+    qDebug() << "UNIT:" << m_unit.get_d();
     return lines;
 }
 

@@ -18,6 +18,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 {
     ui->setupUi(this);
 
+    // enable status bar updates
+    ui->graphicsView->setMouseTracking(true);
+
+
     // setup QGraphics view
     ui->graphicsView->scale(1,-1);
     m_scene = new QGraphicsScene;
@@ -46,36 +50,30 @@ MainWindow::~MainWindow()
 {
     qDeleteAll(m_Centroid);
     m_Centroid.clear();
-
+    delete m_scene;
     delete ui;
 }
 
 void MainWindow::on_actionImport_Gerber_triggered()
 {
     QString filename = QFileDialog::getOpenFileName( this, "Select a file to import" );
+    if (filename.isEmpty())
+        return;
 
     QFileInfo fi(filename);
     QTreeWidgetItem* item = new QTreeWidgetItem();
     item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
     item->setToolTip( 0, QDir::toNativeSeparators(filename) );
 
-    if (fi.suffix().toLower() == "csv") {
+    if ((fi.suffix().toLower() == "csv") || (fi.suffix().toLower() == "mnt")) {
         // most likely Pick&Place file
-        CSVImporter csvImporter;
-        bool ok = csvImporter.import( filename );
-        if (!ok) {
-            QMessageBox::information( this, "open centroid (pick&place) file", "Cannot open csv file." );
-            return;
-        }
         Centroid* centroid = new Centroid;
-        ok = centroid->analyze( csvImporter.csv() );
+        bool ok = centroid->analyze( filename );
         if (!ok) {
             // automatic column determination failed; let the user assign the colunms
-            QMessageBox::information( this, "open centroid (pick&place) file", "Manual column assignment." );
             CentroidDialog dlg;
             dlg.setCSV( centroid );
             dlg.exec();
-            return;
         }
 
         m_Centroid << centroid;
@@ -101,9 +99,9 @@ void MainWindow::on_actionImport_Gerber_triggered()
 
     if (fi.suffix().toLower() == "outline") {
         m_layerOutline->addChild(item);
-    } else if ((fi.suffix().toLower() == "top") || (fi.suffix().toLower() == "positop")) {
+    } else if ((fi.suffix().toLower() == "top") || (fi.suffix().toLower() == "positop") || (fi.suffix().toLower() == "cmp")) {
         m_layerTop->addChild(item);
-    } else if ((fi.suffix().toLower() == "bot") || (fi.suffix().toLower() == "posibot")) {
+    } else if ((fi.suffix().toLower() == "bot") || (fi.suffix().toLower() == "posibot") || (fi.suffix().toLower() == "sol")) {
         m_layerBottom->addChild(item);
     } else {
         m_layerUnknown->addChild(item);
@@ -161,12 +159,11 @@ void MainWindow::updateView()
     }
 
     for (int i=0; i<m_csv->childCount(); i++) {
-        //Centroid* centroid = m_Centroid[m_csv->child(i)->data(0,Qt::UserRole).toInt()];
         render_Centroid( m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -laminateHeight, thickness );
     }
 
     // rescale 2D view
-    ui->graphicsView->fitInView( m_scene->sceneRect(), Qt::KeepAspectRatio );
+    ui->graphicsView->fitInView( m_scene->itemsBoundingRect(), Qt::KeepAspectRatio );
 
     // rescale 3D view
     m_vtkRenderer->ResetCamera();
@@ -183,12 +180,9 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
         QList<Object*> objects = layer.getObjects();
         foreach (Object* object, objects) {
             m_scene->addItem( object->getGraphicsItem() );
-//            ui->graphicsView->fitInView( scene->sceneRect(), Qt::KeepAspectRatio );
-//            qApp->processEvents();
-//            usleep( 100000 );
         }
     }
-
+return;
     //
     // draw 3D image
     //
@@ -200,11 +194,6 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
         assembly->AddPart( prop3D );
         assembly->AddPosition( 0, 0, zpos );
         m_vtkRenderer->AddViewProp( assembly );
-
-//        QList<Object*> objects = layer.getObjects();
-//        foreach (Object* object, objects) {
-//            m_vtkRenderer->AddViewProp( object->getVtkActor() );
-//        }
     }
 }
 
@@ -260,10 +249,43 @@ void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
     int id = item->data(0,Qt::UserRole).toInt();
     if (item->data(0,Qt::UserRole+1) == Type_PickPlaceFile) {
         // Pick&Place file
-//        CSVImporter importer;
-//        importer.import( item->data(0,Qt::UserRole+2).toString() );
         CentroidDialog dlg;
         dlg.setCSV( m_Centroid.at(id) );
         dlg.exec();
+        updateView();
+    }
+}
+
+void MainWindow::on_actionZoom_In_triggered()
+{
+    if (ui->tabWidget->currentIndex() == 0) {
+        // 3D view activated
+    } else {
+        // 2D view activated
+        ui->graphicsView->scale( 2, 2 );
+    }
+}
+
+void MainWindow::on_actionZoom_Out_triggered()
+{
+    if (ui->tabWidget->currentIndex() == 0) {
+        // 3D view activated
+    } else {
+        // 2D view activated
+        ui->graphicsView->scale( 0.5, 0.5 );
+    }
+}
+
+void MainWindow::on_actionZoom_Fit_triggered()
+{
+    if (ui->tabWidget->currentIndex() == 0) {
+        // 3D view activated
+    } else {
+        // 2D view activated
+//        qDebug() << m_scene->itemsBoundingRect();
+//        qDebug() << m_scene->sceneRect();
+//        qDebug() << ui->graphicsView->sceneRect();
+//        qDebug() << ui->graphicsView->visibleRegion();
+        ui->graphicsView->fitInView( m_scene->itemsBoundingRect(), Qt::KeepAspectRatio );
     }
 }

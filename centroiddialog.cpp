@@ -7,6 +7,8 @@ CentroidDialog::CentroidDialog(QWidget *parent) : QDialog(parent), ui(new Ui::Ce
 {
     ui->setupUi(this);
 
+    m_model = 0;
+
     // enable assignment of column headers to columns
     ui->tableView->horizontalHeader()->setMovable( true );
     ui->tableView->horizontalHeader()->setDropIndicatorShown( true );
@@ -20,6 +22,9 @@ CentroidDialog::~CentroidDialog()
 
 void CentroidDialog::setCSV( Centroid* centroid )
 {
+    if (!centroid)
+        return;
+
     m_model = centroid;
     ui->tableView->setModel( m_model );
     Centroid::Unit unit = centroid->unit();
@@ -29,6 +34,10 @@ void CentroidDialog::setCSV( Centroid* centroid )
         ui->comboBox->setCurrentIndex(1);
     else
         ui->comboBox->setCurrentIndex(2);
+
+    ui->combo_separator->blockSignals(true);
+    ui->combo_separator->setEditText( m_model->separator() );
+    ui->combo_separator->blockSignals(false);
 }
 
 void CentroidDialog::onSectionMoved( int logicalIndex, int oldVisualIndex, int newVisualIndex )
@@ -53,9 +62,21 @@ void CentroidDialog::on_buttonBox_accepted()
 {
     Centroid::Unit unit = Centroid::UnitMils;
     if (ui->comboBox->currentIndex() == 0)
-        unit == Centroid::UnitMm;
+        unit = Centroid::UnitMm;
     else if (ui->comboBox->currentIndex() == 1)
-        unit == Centroid::UnitInch;
+        unit = Centroid::UnitInch;
 
     m_model->setUnit( unit );
+
+    accept();
+}
+
+void CentroidDialog::on_combo_separator_currentIndexChanged(const QString &arg1)
+{
+    if (arg1.isEmpty() || (arg1.size() > 1))
+        return;
+
+    m_model->setSeparator( arg1 );
+    m_model->analyze( m_model->filename() );
+    setCSV( m_model );
 }

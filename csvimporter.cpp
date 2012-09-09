@@ -8,8 +8,11 @@ CSVImporter::CSVImporter()
     m_sep = QChar(',');
 }
 
-bool CSVImporter::import( QString filename )
+bool CSVImporter::import( QString filename, QString separator )
 {
+    if (separator.size() >= 1)
+        m_sep = separator.at(0);
+
     QFile file( filename );
     if (!file.open(QFile::ReadOnly))
         return false;

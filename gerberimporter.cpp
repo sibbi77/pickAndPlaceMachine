@@ -19,9 +19,6 @@
 
 GerberImporter::GerberImporter()
 {
-//    QList<QByteArray> l = QTextCodec::availableCodecs();
-//    foreach (QByteArray name, l)
-//        qDebug() << name;
     m_deprecated_parameters << "AS" << "MI" << "OF" << "SF" << "IP" << "IR" << "KO" << "SM";
 
     m_FS_integer = -1;
@@ -33,6 +30,9 @@ GerberImporter::GerberImporter()
 
 bool GerberImporter::import( QString filename )
 {
+    if (filename.isEmpty())
+        return false;
+
     QFile file( filename );
     if (!file.open(QFile::ReadOnly))
         return false;
@@ -227,7 +227,7 @@ void GerberImporter::parameterFS( QString parameterBlock )
     }
 }
 
-//! \brief set mode inches or millimeters
+//! \brief Set mode inches or millimeters.
 void GerberImporter::parameterMO( QString parameterBlock )
 {
     if (parameterBlock.mid(2,2) == "MM")

@@ -8,7 +8,7 @@ class CSVImporter
 public:
     CSVImporter();
 
-    bool import( QString filename );
+    bool import( QString filename, QString separator = "," );
     QList<QStringList> csv() const { return m_csv; }
 
 protected:

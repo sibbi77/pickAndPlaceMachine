@@ -16,51 +16,56 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout_3">
     <item>
-     <widget class="QTabWidget" name="tabWidget">
-      <property name="currentIndex">
-       <number>0</number>
+     <widget class="QSplitter" name="splitter_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QWidget" name="tab">
-       <attribute name="title">
-        <string>3D</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_2">
-        <item>
-         <widget class="QSplitter" name="splitter">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <widget class="QTreeWidget" name="treeWidget">
-           <property name="contextMenuPolicy">
-            <enum>Qt::CustomContextMenu</enum>
-           </property>
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-          <widget class="QVTKWidget" name="qvtkWidget">
-           <property name="minimumSize">
-            <size>
-             <width>200</width>
-             <height>0</height>
-            </size>
-           </property>
-          </widget>
-         </widget>
-        </item>
-       </layout>
+      <widget class="QTreeWidget" name="treeWidget">
+       <property name="contextMenuPolicy">
+        <enum>Qt::CustomContextMenu</enum>
+       </property>
+       <column>
+        <property name="text">
+         <string notr="true">1</string>
+        </property>
+       </column>
       </widget>
-      <widget class="QWidget" name="tab_2">
-       <attribute name="title">
-        <string>2D</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout">
-        <item>
-         <widget class="QGraphicsView" name="graphicsView"/>
-        </item>
-       </layout>
+      <widget class="QTabWidget" name="tabWidget">
+       <property name="currentIndex">
+        <number>1</number>
+       </property>
+       <widget class="QWidget" name="tab">
+        <attribute name="title">
+         <string>3D</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <widget class="QSplitter" name="splitter">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <widget class="QVTKWidget" name="qvtkWidget">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>0</height>
+             </size>
+            </property>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tab_2">
+        <attribute name="title">
+         <string>2D</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <widget class="QGraphicsView" name="graphicsView"/>
+         </item>
+        </layout>
+       </widget>
       </widget>
      </widget>
     </item>
@@ -90,11 +95,59 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
+   <addaction name="actionImport_Gerber"/>
+   <addaction name="separator"/>
+   <addaction name="actionZoom_In"/>
+   <addaction name="actionZoom_Out"/>
+   <addaction name="actionZoom_Fit"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <action name="actionImport_Gerber">
+   <property name="icon">
+    <iconset resource="pickAndPlaceMachine.qrc">
+     <normaloff>:/images/edit_add.png</normaloff>:/images/edit_add.png</iconset>
+   </property>
    <property name="text">
-    <string>Import &amp;Gerber</string>
+    <string>&amp;Import File</string>
+   </property>
+   <property name="toolTip">
+    <string>Import Gerber, Centroid (Pick&amp;Place) or Excellon files</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl++</string>
+   </property>
+  </action>
+  <action name="actionZoom_In">
+   <property name="icon">
+    <iconset resource="pickAndPlaceMachine.qrc">
+     <normaloff>:/images/viewmag+.png</normaloff>:/images/viewmag+.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom In</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl++</string>
+   </property>
+  </action>
+  <action name="actionZoom_Out">
+   <property name="icon">
+    <iconset resource="pickAndPlaceMachine.qrc">
+     <normaloff>:/images/viewmag-.png</normaloff>:/images/viewmag-.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Out</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+-</string>
+   </property>
+  </action>
+  <action name="actionZoom_Fit">
+   <property name="icon">
+    <iconset resource="pickAndPlaceMachine.qrc">
+     <normaloff>:/images/viewmagfit.png</normaloff>:/images/viewmagfit.png</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom Fit</string>
    </property>
   </action>
  </widget>
@@ -106,6 +159,8 @@
    <header>QVTKWidget.h</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="pickAndPlaceMachine.qrc"/>
+ </resources>
  <connections/>
 </ui>

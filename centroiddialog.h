@@ -27,6 +27,7 @@ protected slots:
     void onSectionMoved(  int logicalIndex, int oldVisualIndex, int newVisualIndex );
 private slots:
     void on_buttonBox_accepted();
+    void on_combo_separator_currentIndexChanged(const QString &arg1);
 };
 
 #endif // CENTROIDDIALOG_H
