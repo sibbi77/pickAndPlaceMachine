@@ -19,8 +19,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->setupUi(this);
 
     // enable status bar updates
-    ui->graphicsView->setMouseTracking(true);
-
+    ui->graphicsView->setStatusBar( ui->statusBar );
 
     // setup QGraphics view
     ui->graphicsView->scale(1,-1);

@@ -603,7 +603,7 @@ void Layer::draw( mpq_class x, mpq_class y, mpq_class i, mpq_class j, Unit unit 
     if (unit == mm)
         unit_factor = 1;
     if (unit == in)
-        unit_factor = mpq_class(10) / mpq_class(254); // 1/(25.4 mm)
+        unit_factor = mpq_class(254) / mpq_class(10);
 
     // this will fail, if the unit is changed within the layer (not allowed by specs)
     x *= unit_factor;
@@ -954,7 +954,7 @@ Aperture::Aperture()
     m_type = circle;
     m_hole = noHole;
     m_unit = in;
-    m_unitFactor = mpq_class(10) / mpq_class(254);
+    m_unitFactor = mpq_class(254) / mpq_class(10);
 }
 
 Aperture::Aperture(Unit unit)
@@ -966,7 +966,7 @@ Aperture::Aperture(Unit unit)
     if (m_unit == mm)
         m_unitFactor = 1;
     if (m_unit == in)
-        m_unitFactor = mpq_class(10) / mpq_class(254);
+        m_unitFactor = mpq_class(254) / mpq_class(10);
 }
 
 void Aperture::setCircle( QList<mpq_class> arguments )

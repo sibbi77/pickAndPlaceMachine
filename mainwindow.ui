@@ -62,7 +62,7 @@
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout">
          <item>
-          <widget class="QGraphicsView" name="graphicsView"/>
+          <widget class="GraphicsView" name="graphicsView"/>
          </item>
         </layout>
        </widget>
@@ -157,6 +157,11 @@
    <class>QVTKWidget</class>
    <extends>QWidget</extends>
    <header>QVTKWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>GraphicsView</class>
+   <extends>QGraphicsView</extends>
+   <header>graphicsview.h</header>
   </customwidget>
  </customwidgets>
  <resources>
