@@ -229,7 +229,7 @@ void MainWindow::render_Centroid( int num, double zpos_top, double zpos_bottom, 
         qDebug() << line.RefDes << line.Description << line.Value << line.x.get_d() << line.y.get_d() << line.rotation.get_d();
 
         QRectF r;
-        r.setSize( QSizeF(1e-3,1e-3) );
+        r.setSize( QSizeF(1,1) );
         r.moveCenter( QPointF(line.x.get_d(),line.y.get_d()) );
         QGraphicsEllipseItem *item = new QGraphicsEllipseItem(r);
         item->setPen( QPen("red") );

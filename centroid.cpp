@@ -7,7 +7,7 @@ Centroid::Centroid()
 {
     m_rowCount = 0;
     m_columnCount = 0;
-    m_unit = mpq_class(254) / mpq_class(100000) / mpq_class(1000); // UnitMils
+    m_unit = mpq_class(254) / mpq_class(10000); // UnitMils
     m_csvSeparator = ",";
 }
 
@@ -273,22 +273,22 @@ void Centroid::setUnit( Unit unit )
 {
     switch (unit) {
     case UnitMm:
-        m_unit = mpq_class(1) / mpq_class(1000);
+        m_unit = mpq_class(1);
         break;
     case UnitInch:
-        m_unit = mpq_class(254) / mpq_class(100) / mpq_class(1000);
+        m_unit = mpq_class(254) / mpq_class(10);
         break;
     case UnitMils:
-        m_unit = mpq_class(254) / mpq_class(100000) / mpq_class(1000);
+        m_unit = mpq_class(254) / mpq_class(10000);
         break;
     }
 }
 
 Centroid::Unit Centroid::unit() const
 {
-    if (m_unit == mpq_class(1) / mpq_class(1000))
+    if (m_unit == mpq_class(1))
         return UnitMm;
-    if (m_unit == mpq_class(254) / mpq_class(100) / mpq_class(1000))
+    if (m_unit == mpq_class(254) / mpq_class(10))
         return UnitInch;
     return UnitMils;
 }
