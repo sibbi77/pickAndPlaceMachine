@@ -32,6 +32,8 @@ private slots:
 
     void on_actionZoom_Fit_triggered();
 
+    void on_actionExport_to_Freecad_triggered();
+
 private:
     Ui::MainWindow *ui;
 
@@ -45,9 +47,13 @@ protected:
     QList<Centroid*> m_Centroid;
     QTreeWidgetItem *m_layerOutline, *m_layerTop, *m_layerBottom, *m_csv, *m_layerUnknown;
 
+    double m_laminateHeight, m_metalThickness;
+
     void updateView();
     void render( GerberImporter& importer, double zpos, double thickness );
     void render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness );
+    void render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness );
+    void render_Centroid_into_Freecad_importItem( QTextStream& stream, CentroidLine line, double zpos_top, double zpos_bottom, double thickness );
 };
 
 #endif // MAINWINDOW_H

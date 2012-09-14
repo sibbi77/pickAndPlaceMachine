@@ -85,6 +85,7 @@
      <string>&amp;File</string>
     </property>
     <addaction name="actionImport_Gerber"/>
+    <addaction name="actionExport_to_Freecad"/>
    </widget>
    <addaction name="menu_File"/>
   </widget>
@@ -148,6 +149,11 @@
    </property>
    <property name="text">
     <string>Zoom Fit</string>
+   </property>
+  </action>
+  <action name="actionExport_to_Freecad">
+   <property name="text">
+    <string>Export to &amp;Freecad</string>
    </property>
   </action>
  </widget>

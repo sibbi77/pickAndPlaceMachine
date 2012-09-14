@@ -43,6 +43,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->treeWidget->addTopLevelItem( m_csv );
     m_layerUnknown = new QTreeWidgetItem(QStringList("Unknown"));
     ui->treeWidget->addTopLevelItem( m_layerUnknown );
+
+    // setup defaults
+    m_laminateHeight = 1.6e-3; // 1.6 mm
+    m_metalThickness = 35e-6; // metal thickness 35 um
+
 }
 
 MainWindow::~MainWindow()
@@ -119,10 +124,6 @@ void MainWindow::updateView()
     m_vtkRenderer->ResetCamera();
     ui->qvtkWidget->GetRenderWindow()->Render();
 
-
-    double laminateHeight = 1.6e-3; // 1.6 mm
-    double thickness = 35e-6; // metal thickness 35 um
-
     if (m_layerOutline->childCount() > 0) {
         if (m_layerOutline->childCount() > 1)
             qDebug() << "currently only one outline supported";
@@ -137,7 +138,7 @@ void MainWindow::updateView()
         double xmax = std::max( dimensions.left(), dimensions.right() );
         double ymin = std::min( dimensions.bottom(), dimensions.top() );
         double ymax = std::max( dimensions.bottom(), dimensions.top() );
-        cubeSource->SetBounds( xmin, xmax, ymin, ymax, -laminateHeight, 0 );
+        cubeSource->SetBounds( xmin, xmax, ymin, ymax, -m_laminateHeight, 0 );
         vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
         mapper->SetInputConnection(cubeSource->GetOutputPort());
         vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
@@ -149,16 +150,16 @@ void MainWindow::updateView()
 
     for (int i=0; i<m_layerTop->childCount(); i++) {
         GerberImporter& importer = m_GerberImporter[m_layerTop->child(i)->data(0,Qt::UserRole).toInt()];
-        render( importer, 0, thickness );
+        render( importer, 0, m_metalThickness );
     }
 
     for (int i=0; i<m_layerBottom->childCount(); i++) {
         GerberImporter& importer = m_GerberImporter[m_layerBottom->child(i)->data(0,Qt::UserRole).toInt()];
-        render( importer, -laminateHeight - thickness, thickness );
+        render( importer, -m_laminateHeight - m_metalThickness, m_metalThickness );
     }
 
     for (int i=0; i<m_csv->childCount(); i++) {
-        render_Centroid( m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -laminateHeight, thickness );
+        render_Centroid( m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -m_laminateHeight, m_metalThickness );
     }
 
     // rescale 2D view
@@ -287,4 +288,67 @@ void MainWindow::on_actionZoom_Fit_triggered()
 //        qDebug() << ui->graphicsView->visibleRegion();
         ui->graphicsView->fitInView( m_scene->itemsBoundingRect(), Qt::KeepAspectRatio );
     }
+}
+
+void MainWindow::on_actionExport_to_Freecad_triggered()
+{
+    QString filename = QFileDialog::getSaveFileName( this, "Export to Freecad Python script", QString(), "Python scripts (*.py)" );
+    if (filename.isEmpty())
+        return;
+
+    QFileInfo fi(filename);
+    QFile file(fi.absoluteFilePath());
+    if (!file.open(QFile::WriteOnly)) {
+        QMessageBox::information( this, "Export file", "opening file failed." );
+        return;
+    }
+    QTextStream stream(&file);
+
+    // write header
+    stream << "# -*- coding: UTF-8 -*-" << endl;
+    stream << endl;
+    stream << "# start from freecad python console with:" << endl;
+    stream << "# execfile( '" + fi.absoluteFilePath() + "' )" << endl;
+    stream << "import Part, FreeCAD, math" << endl;
+    stream << "from FreeCAD import Base" << endl;
+    stream << endl;
+
+    for (int i=0; i<m_csv->childCount(); i++) {
+        render_Centroid_into_Freecad( stream, m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -m_laminateHeight, m_metalThickness );
+    }
+
+}
+
+void MainWindow::render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness )
+{
+    if (num < 0 || num >= m_Centroid.size())
+        return;
+
+    Centroid* centroid = m_Centroid.at(num);
+    QList<CentroidLine> lines = centroid->lines();
+
+    for (int i=0; i<lines.size(); i++) {
+        CentroidLine line = lines.at(i);
+        render_Centroid_into_Freecad_importItem( stream, line, zpos_top, zpos_bottom, thickness );
+    }
+}
+
+//! \brief The heart of 3D component placement.
+//! This function searches for the correct component (based on the information in Pick&Place data \c line).
+//! It creates a stream of Freecad Python commands to import the component at the correct position and orientation.
+void MainWindow::render_Centroid_into_Freecad_importItem( QTextStream& stream, CentroidLine line, double zpos_top, double zpos_bottom, double thickness )
+{
+    QString Description = line.Description; // this identified the component
+
+    //stream << "Part.insert(\"/home/sebastian/src/pickAndPlaceMachine/rs-online.com/STEP AP214/17433.stp\",\"X1\")" << endl;
+
+//    stream << "s = Part.Shape()" << endl;
+//    stream << "s.read(\"/home/sebastian/src/pickAndPlaceMachine/rs-online.com/STEP AP214/17433.stp\")" << endl;
+//    stream << "Part.show(s)" << endl;
+
+    stream << "shapeobj = FreeCAD.activeDocument().addObject(\"Part::Feature\",\"X1\")" << endl;
+    stream << "s = Part.Shape()" << endl;
+    stream << "s.read(\"/home/sebastian/src/pickAndPlaceMachine/rs-online.com/STEP AP214/17433.stp\")" << endl;
+    stream << "shapeobj.Shape = s" << endl;
+    stream << "FreeCAD.activeDocument().recompute()" << endl;
 }
