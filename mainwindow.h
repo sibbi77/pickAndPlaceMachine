@@ -51,6 +51,8 @@ protected:
 
     void updateView();
     void render( GerberImporter& importer, double zpos, double thickness );
+    void render_2D( GerberImporter& importer );
+    void render_3D( GerberImporter& importer, double zpos, double thickness );
     void render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad_importItem( QTextStream& stream, CentroidLine line, double zpos_top, double zpos_bottom, double thickness );

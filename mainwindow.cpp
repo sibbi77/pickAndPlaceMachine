@@ -30,6 +30,11 @@
 #include <vtkActor.h>
 #include <vtkSmartPointer.h>
 #include <vtkProperty.h>
+#include <vtkPolygon.h>
+#include <vtkTransformPolyDataFilter.h>
+#include <vtkLinearExtrusionFilter.h>
+#include <vtkCellArray.h>
+#include <vtkTriangleFilter.h>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -132,6 +137,41 @@ void MainWindow::on_actionImport_Gerber_triggered()
     updateView();
 }
 
+
+static vtkSmartPointer<vtkActor> AddClosedPoly( QList<QPointF> coords, double thickness )
+{
+    vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+    vtkSmartPointer<vtkCellArray> poly = vtkSmartPointer<vtkCellArray>::New();
+    vtkSmartPointer<vtkPolyData> profile = vtkSmartPointer<vtkPolyData>::New();
+    vtkSmartPointer<vtkLinearExtrusionFilter> extrude = vtkSmartPointer<vtkLinearExtrusionFilter>::New();
+    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+
+    for (int i=0; i<coords.size(); i++)
+        points->InsertPoint( i, coords.at(i).x(), coords.at(i).y(), 0 );
+    poly->InsertNextCell( coords.size() );
+    for (int i=0; i<coords.size(); i++)
+        poly->InsertCellPoint(i);
+    profile->SetPoints( points );
+    profile->SetPolys( poly );
+
+    vtkSmartPointer<vtkTriangleFilter> tf = vtkSmartPointer<vtkTriangleFilter>::New();
+    tf->SetInput( profile );
+
+    extrude->SetInput( tf->GetOutput() );
+    extrude->SetExtrusionTypeToVectorExtrusion();
+    extrude->SetVector( 0,0,thickness );
+    extrude->CappingOn();
+
+    mapper->SetInput( extrude->GetOutput() );
+    actor->SetMapper( mapper );
+
+    return actor;
+}
+
+
+
+
 void MainWindow::updateView()
 {
     m_scene->clear();
@@ -147,22 +187,22 @@ void MainWindow::updateView()
 
         GerberImporter& importer = m_GerberImporter[m_layerOutline->child(0)->data(0,Qt::UserRole).toInt()];
 
-        QRectF dimensions = importer.getDimensionsF();
+        // create 2D outline
+        render_2D( importer );
 
-        // create the laminate
-        vtkSmartPointer<vtkCubeSource> cubeSource = vtkSmartPointer<vtkCubeSource>::New();
-        double xmin = std::min( dimensions.left(), dimensions.right() );
-        double xmax = std::max( dimensions.left(), dimensions.right() );
-        double ymin = std::min( dimensions.bottom(), dimensions.top() );
-        double ymax = std::max( dimensions.bottom(), dimensions.top() );
-        cubeSource->SetBounds( xmin, xmax, ymin, ymax, -m_laminateHeight, 0 );
-        vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-        mapper->SetInputConnection(cubeSource->GetOutputPort());
-        vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-        actor->SetMapper(mapper);
-        actor->GetProperty()->SetColor( 0, 0.9, 0 );
-        actor->GetProperty()->SetOpacity( 0.4 );
-        m_vtkRenderer->AddViewProp( actor );
+        // create 3D laminate
+
+//        QList<QPointF> outline = importer.getOutlineF();
+        QList<QPointF> outline;
+        QRectF dimensions = importer.getDimensionsF(); // FIXME
+        outline << dimensions.bottomLeft(); // FIXME
+        outline << dimensions.bottomRight(); // FIXME
+        outline << dimensions.topRight(); // FIXME
+        outline << dimensions.topLeft(); // FIXME
+        vtkSmartPointer<vtkActor> actor2 = AddClosedPoly( outline, -m_laminateHeight );
+        actor2->GetProperty()->SetColor( 0, 0.9, 0 );
+        actor2->GetProperty()->SetOpacity( 0.4 );
+        m_vtkRenderer->AddViewProp( actor2 );
     }
 
     for (int i=0; i<m_layerTop->childCount(); i++) {
@@ -189,6 +229,12 @@ void MainWindow::updateView()
 
 void MainWindow::render( GerberImporter& importer, double zpos, double thickness )
 {
+    render_2D( importer );
+    render_3D( importer, zpos, thickness );
+}
+
+void MainWindow::render_2D( GerberImporter& importer )
+{
     //
     // draw 2D image
     //
@@ -199,12 +245,15 @@ void MainWindow::render( GerberImporter& importer, double zpos, double thickness
             m_scene->addItem( object->getGraphicsItem() );
         }
     }
-return;
+}
+
+void MainWindow::render_3D( GerberImporter& importer, double zpos, double thickness )
+{
     //
     // draw 3D image
     //
 
-    layers = importer.getLayers();
+    QList<Layer> layers = importer.getLayers();
     foreach (Layer layer, layers) {
         vtkSmartPointer<vtkAssembly> assembly = vtkSmartPointer<vtkAssembly>::New();
         vtkSmartPointer<vtkProp3D> prop3D = layer.getVtkProp3D( thickness );
