@@ -8,6 +8,7 @@
 
 #include <vtkAssembly.h>
 #include <vtkSmartPointer.h>
+#include <vtkDataObject.h>
 
 enum Unit {mm,in};
 
@@ -84,6 +85,7 @@ public:
     Object();
     virtual QGraphicsItem* getGraphicsItem() const;
     virtual vtkSmartPointer<vtkProp3D> getVtkProp3D(double thickness) const;
+    virtual vtkSmartPointer<vtkDataObject> getVtkDataObject(double thickness) const;
 };
 
 class Line : public Object
@@ -92,6 +94,7 @@ public:
     Line( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, Aperture aperture );
     virtual QGraphicsItem* getGraphicsItem() const;
     virtual vtkSmartPointer<vtkProp3D> getVtkProp3D( double thickness ) const;
+    virtual vtkSmartPointer<vtkDataObject> getVtkDataObject(double thickness) const;
 
 protected:
     mpq_class m_x1, m_y1, m_x2, m_y2;
@@ -179,6 +182,7 @@ public:
 
     QList<Object*> getObjects() const {return m_objects;}
     vtkSmartPointer<vtkProp3D> getVtkProp3D( double thickness ) const;
+    vtkSmartPointer<vtkDataObject> getVtkDataObject( double thickness ) const;
 
 protected:
     mpq_class m_current_x;

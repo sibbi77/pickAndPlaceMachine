@@ -32,7 +32,12 @@
 #include <vtkTriangleFilter.h>
 #include <vtkCellArray.h>
 #include <vtkCleanPolyData.h>
-
+#include <vtkGenericGeometryFilter.h>
+#include <vtkAppendPolyData.h>
+#include <vtkTransformPolyDataFilter.h>
+#include <vtkTransform.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkStripper.h>
 
 GerberImporter::GerberImporter()
 {
@@ -739,13 +744,41 @@ void Layer::stopOutlineFill()
 
 vtkSmartPointer<vtkProp3D> Layer::getVtkProp3D( double thickness ) const
 {
-    vtkSmartPointer<vtkAssembly> assembly = vtkSmartPointer<vtkAssembly>::New();
+    vtkSmartPointer<vtkDataObject> data = getVtkDataObject(thickness);
+    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInput( vtkPolyData::SafeDownCast(data) );
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+    return actor;
+}
+
+vtkSmartPointer<vtkDataObject> Layer::getVtkDataObject( double thickness ) const
+{
+    vtkSmartPointer<vtkAppendPolyData> appendPolyData = vtkSmartPointer<vtkAppendPolyData>::New();
     foreach (Object* object, m_objects) {
-        vtkSmartPointer<vtkProp3D> prop3D = object->getVtkProp3D(thickness);
-        if (prop3D)
-            assembly->AddPart( prop3D );
+        vtkSmartPointer<vtkDataObject> dataObject = object->getVtkDataObject(thickness);
+        appendPolyData->AddInput( vtkPolyData::SafeDownCast(dataObject) ); // FIXME
+//        // now convert the dataObject into polygonal data:
+//        vtkSmartPointer<vtkGenericGeometryFilter> polyFilter = vtkSmartPointer<vtkGenericGeometryFilter>::New();
+//        polyFilter->SetInput( dataObject );
+//        appendPolyData->AddInput( polyFilter->GetOutput() );
     }
-    return assembly;
+
+    vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+    cleanFilter->SetInputConnection( appendPolyData->GetOutputPort() );
+    cleanFilter->SetAbsoluteTolerance( thickness * 0.9 );
+
+    vtkSmartPointer<vtkPolyDataNormals> normalFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
+    normalFilter->SetInputConnection( cleanFilter->GetOutputPort() );
+
+    vtkSmartPointer<vtkTriangleFilter> triangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+    triangleFilter->SetInputConnection( normalFilter->GetOutputPort() );
+
+    vtkSmartPointer<vtkStripper> stripperFilter = vtkSmartPointer<vtkStripper>::New();
+    stripperFilter->SetInputConnection( triangleFilter->GetOutputPort() );
+
+    return stripperFilter->GetOutput();
 }
 
 
@@ -763,6 +796,11 @@ QGraphicsItem* Object::getGraphicsItem() const
 }
 
 vtkSmartPointer<vtkProp3D> Object::getVtkProp3D( double thickness ) const
+{
+    return 0;
+}
+
+vtkSmartPointer<vtkDataObject> Object::getVtkDataObject(double thickness) const
 {
     return 0;
 }
@@ -793,6 +831,17 @@ QGraphicsItem* Line::getGraphicsItem() const
 
 vtkSmartPointer<vtkProp3D> Line::getVtkProp3D( double thickness ) const
 {
+    vtkSmartPointer<vtkDataObject> data = getVtkDataObject(thickness);
+    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInput( vtkPolyData::SafeDownCast(data) );
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
+    return actor;
+}
+
+vtkSmartPointer<vtkDataObject> Line::getVtkDataObject(double thickness) const
+{
     double x1 = m_x1.get_d();
     double y1 = m_y1.get_d();
     double x2 = m_x2.get_d();
@@ -801,47 +850,62 @@ vtkSmartPointer<vtkProp3D> Line::getVtkProp3D( double thickness ) const
     double length = sqrt( pow(x2-x1,2.0) + pow(y2-y1,2.0) );
     double angle = atan2( y2-y1, x2-x1 );
 
-    vtkSmartPointer<vtkAssembly> assembly = vtkSmartPointer<vtkAssembly>::New();
+    vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+    vtkSmartPointer<vtkTransform> transform;
+    vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter;
 
     vtkSmartPointer<vtkCubeSource> cubeSource = vtkSmartPointer<vtkCubeSource>::New();
     cubeSource->SetBounds( 0, length, -diameter/2.0, diameter/2.0, 0, thickness );
-    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-    mapper->SetInputConnection(cubeSource->GetOutputPort());
-    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-    actor->SetMapper(mapper);
-    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
-    assembly->AddPart( actor );
+    appendFilter->AddInput( cubeSource->GetOutput() );
 
     vtkSmartPointer<vtkCylinderSource> cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
     cylinderSource->SetHeight( thickness );
     cylinderSource->SetRadius( diameter/2.0 );
     cylinderSource->SetResolution(20); // FIXME cylinders in vtk are ugly!!!
-    mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-    mapper->SetInputConnection(cylinderSource->GetOutputPort());
-    actor = vtkSmartPointer<vtkActor>::New();
-    actor->SetMapper(mapper);
-    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
-    actor->RotateX( 90 ); // let the axis of the cylinder point towards +z
-    actor->SetPosition( 0, 0, thickness/2.0 );
-    assembly->AddPart( actor );
+    transform = vtkSmartPointer<vtkTransform>::New();
+    transform->PostMultiply();
+    transform->RotateX( 90 ); // let the axis of the cylinder point towards +z
+    transform->Translate( 0, 0, thickness/2.0 );
+    transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+    transformFilter->SetInput( cylinderSource->GetOutput() );
+    transformFilter->SetTransform( transform );
+    appendFilter->AddInput( transformFilter->GetOutput() );
 
     cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
     cylinderSource->SetHeight( thickness );
     cylinderSource->SetRadius( diameter/2.0 );
     cylinderSource->SetResolution(20); // FIXME cylinders in vtk are ugly!!!
-    mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-    mapper->SetInputConnection(cylinderSource->GetOutputPort());
-    actor = vtkSmartPointer<vtkActor>::New();
-    actor->SetMapper(mapper);
-    actor->GetProperty()->SetColor( 0.7, 0.7, 0.7 );
-    actor->RotateX( 90 ); // let the axis of the cylinder point towards +z
-    actor->SetPosition( length, 0, thickness/2.0 );
-    assembly->AddPart( actor );
+    transform = vtkSmartPointer<vtkTransform>::New();
+    transform->PostMultiply();
+    transform->RotateX( 90 ); // let the axis of the cylinder point towards +z
+    transform->Translate( length, 0, thickness/2.0 );
+    transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+    transformFilter->SetInput( cylinderSource->GetOutput() );
+    transformFilter->SetTransform( transform );
+    appendFilter->AddInput( transformFilter->GetOutput() );
 
-    assembly->RotateZ( angle / M_PI * 180.0 );
-    assembly->SetPosition( x1, y1, 0 );
+//    vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+//    cleanFilter->SetInputConnection( appendFilter->GetOutputPort() );
+//    cleanFilter->SetAbsoluteTolerance( thickness * 0.9 );
 
-    return assembly;
+//    vtkSmartPointer<vtkPolyDataNormals> normalFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
+//    normalFilter->SetInputConnection( cleanFilter->GetOutputPort() );
+
+//    vtkSmartPointer<vtkTriangleFilter> triangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+//    triangleFilter->SetInputConnection( normalFilter->GetOutputPort() );
+
+//    vtkSmartPointer<vtkStripper> stripperFilter = vtkSmartPointer<vtkStripper>::New();
+//    stripperFilter->SetInputConnection( triangleFilter->GetOutputPort() );
+
+    transform = vtkSmartPointer<vtkTransform>::New();
+    transform->PostMultiply();
+    transform->RotateZ( angle / M_PI * 180.0 );
+    transform->Translate( x1, y1, 0 );
+    transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+    transformFilter->SetInputConnection( appendFilter->GetOutputPort() );
+    transformFilter->SetTransform( transform );
+
+    return transformFilter->GetOutput();
 }
 
 Line_cw_ccw::Line_cw_ccw( mpq_class x1, mpq_class y1, mpq_class x2, mpq_class y2, mpq_class i, mpq_class j, Aperture aperture ) : m_aperture(aperture)

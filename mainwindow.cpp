@@ -68,8 +68,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->treeWidget->addTopLevelItem( m_layerUnknown );
 
     // setup defaults
-    m_laminateHeight = 1.6e-3; // 1.6 mm
-    m_metalThickness = 35e-6; // metal thickness 35 um
+    m_laminateHeight = 1.6; // 1.6 mm
+    m_metalThickness = 35e-3; // metal thickness 35 um
 
 }
 

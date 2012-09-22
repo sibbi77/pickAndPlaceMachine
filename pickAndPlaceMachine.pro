@@ -13,7 +13,7 @@ QMAKE_CXXFLAGS_DEBUG = "-ggdb -O0"
 
 # vtk
 INCLUDEPATH += /usr/include/vtk-5.8
-LIBS += -lQVTK -lvtkCommon -lvtkRendering -lvtkGraphics -lvtkFiltering
+LIBS += -lQVTK -lvtkCommon -lvtkRendering -lvtkGraphics -lvtkFiltering -lvtkGenericFiltering
 
 # gmp
 LIBS += -lgmpxx -lgmp
