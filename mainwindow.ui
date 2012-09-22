@@ -85,6 +85,7 @@
      <string>&amp;File</string>
     </property>
     <addaction name="actionImport_Gerber"/>
+    <addaction name="actionRemove_File"/>
     <addaction name="actionExport_to_Freecad"/>
    </widget>
    <addaction name="menu_File"/>
@@ -97,6 +98,7 @@
     <bool>false</bool>
    </attribute>
    <addaction name="actionImport_Gerber"/>
+   <addaction name="actionRemove_File"/>
    <addaction name="separator"/>
    <addaction name="actionZoom_In"/>
    <addaction name="actionZoom_Out"/>
@@ -113,9 +115,6 @@
    </property>
    <property name="toolTip">
     <string>Import Gerber, Centroid (Pick&amp;Place) or Excellon files</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl++</string>
    </property>
   </action>
   <action name="actionZoom_In">
@@ -154,6 +153,21 @@
   <action name="actionExport_to_Freecad">
    <property name="text">
     <string>Export to &amp;Freecad</string>
+   </property>
+  </action>
+  <action name="actionRemove_File">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="pickAndPlaceMachine.qrc">
+     <normaloff>:/images/edit_remove.png</normaloff>:/images/edit_remove.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Remove File</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
    </property>
   </action>
  </widget>

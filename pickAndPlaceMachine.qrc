@@ -4,5 +4,6 @@
         <file>images/viewmag+.png</file>
         <file>images/viewmagfit.png</file>
         <file>images/edit_add.png</file>
+        <file>images/edit_remove.png</file>
     </qresource>
 </RCC>

@@ -34,6 +34,10 @@ private slots:
 
     void on_actionExport_to_Freecad_triggered();
 
+    void on_actionRemove_File_triggered();
+
+    void on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
+
 private:
     Ui::MainWindow *ui;
 
@@ -43,8 +47,8 @@ protected:
     QGraphicsScene* m_scene;
 
     vtkRenderer *m_vtkRenderer;
-    QList<GerberImporter> m_GerberImporter;
-    QList<Centroid*> m_Centroid;
+    QHash<int,GerberImporter> m_GerberImporter; //!< int: unique id (used in treeWidget) to refer to a GerberImporter
+    QHash<int,Centroid*> m_Centroid; //!< int: unique id (used in treeWidget) to refer to a Centroid file
     QTreeWidgetItem *m_layerOutline, *m_layerTop, *m_layerBottom, *m_csv, *m_layerUnknown;
 
     double m_laminateHeight, m_metalThickness;

@@ -103,8 +103,13 @@ void MainWindow::on_actionImport_Gerber_triggered()
             dlg.exec();
         }
 
-        m_Centroid << centroid;
-        int id = m_Centroid.size() - 1;
+        QList<int> keys = m_Centroid.keys();
+        int id = 0;
+        if (!keys.isEmpty()) {
+            qSort(keys);
+            id = keys.last()+1;
+        }
+        m_Centroid[id] = centroid;
         item->setData( 0, Qt::UserRole, id );
         item->setData( 0, Qt::UserRole+1, Type_PickPlaceFile ); // Pick&Place file
         item->setData( 0, Qt::UserRole+2, filename );
@@ -119,8 +124,13 @@ void MainWindow::on_actionImport_Gerber_triggered()
     if (!ok)
         return;
 
-    m_GerberImporter << importer;
-    int id = m_GerberImporter.size() - 1;
+    QList<int> keys = m_GerberImporter.keys();
+    int id = 0;
+    if (!keys.isEmpty()) {
+        qSort(keys);
+        id = keys.last()+1;
+    }
+    m_GerberImporter[id] = importer;
     item->setData( 0, Qt::UserRole, id );
     item->setData( 0, Qt::UserRole+1, Type_GerberFile ); // Gerber file
 
@@ -181,7 +191,8 @@ void MainWindow::updateView()
     m_scene->clear();
     ui->graphicsView->update();
 
-    m_vtkRenderer->Clear();
+    // remove all actors from 3D scene
+    m_vtkRenderer->RemoveAllProps();
     m_vtkRenderer->ResetCamera();
     ui->qvtkWidget->GetRenderWindow()->Render();
 
@@ -189,7 +200,8 @@ void MainWindow::updateView()
         if (m_layerOutline->childCount() > 1)
             qDebug() << "currently only one outline supported";
 
-        GerberImporter& importer = m_GerberImporter[m_layerOutline->child(0)->data(0,Qt::UserRole).toInt()];
+        int id = m_layerOutline->child(0)->data(0,Qt::UserRole).toInt();
+        GerberImporter& importer = m_GerberImporter[id];
 
         // create 2D outline
         render_2D( importer );
@@ -199,11 +211,6 @@ void MainWindow::updateView()
         QList<QPointF> outline;
         QPolygonF outline_poly = importer.getOutlineF();
         outline = outline_poly.toList();
-//        QRectF dimensions = importer.getDimensionsF(); // FIXME
-//        outline << dimensions.bottomLeft(); // FIXME
-//        outline << dimensions.bottomRight(); // FIXME
-//        outline << dimensions.topRight(); // FIXME
-//        outline << dimensions.topLeft(); // FIXME
         if (outline.size() >= 3) {
             vtkSmartPointer<vtkActor> actor2 = AddClosedPoly( outline, -m_laminateHeight );
             actor2->GetProperty()->SetColor( 0, 0.9, 0 );
@@ -213,17 +220,20 @@ void MainWindow::updateView()
     }
 
     for (int i=0; i<m_layerTop->childCount(); i++) {
-        GerberImporter& importer = m_GerberImporter[m_layerTop->child(i)->data(0,Qt::UserRole).toInt()];
+        int id = m_layerTop->child(i)->data(0,Qt::UserRole).toInt();
+        GerberImporter& importer = m_GerberImporter[id];
         render( importer, 0, m_metalThickness );
     }
 
     for (int i=0; i<m_layerBottom->childCount(); i++) {
-        GerberImporter& importer = m_GerberImporter[m_layerBottom->child(i)->data(0,Qt::UserRole).toInt()];
+        int id = m_layerBottom->child(i)->data(0,Qt::UserRole).toInt();
+        GerberImporter& importer = m_GerberImporter[id];
         render( importer, -m_laminateHeight - m_metalThickness, m_metalThickness );
     }
 
     for (int i=0; i<m_csv->childCount(); i++) {
-        render_Centroid( m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -m_laminateHeight, m_metalThickness );
+        int id = m_csv->child(i)->data(0,Qt::UserRole).toInt();
+        render_Centroid( id, 0, -m_laminateHeight, m_metalThickness );
     }
 
     // rescale 2D view
@@ -272,10 +282,10 @@ void MainWindow::render_3D( GerberImporter& importer, double zpos, double thickn
 
 void MainWindow::render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness )
 {
-    if (num < 0 || num >= m_Centroid.size())
+    if (!m_Centroid.contains(num))
         return;
 
-    Centroid* centroid = m_Centroid.at(num);
+    Centroid* centroid = m_Centroid.value(num);
     QList<CentroidLine> lines = centroid->lines();
 
     //
@@ -319,13 +329,30 @@ void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)
     QTreeWidgetItem* item = ui->treeWidget->itemAt(pos);
     if (!item)
         return;
+    if (!item->parent())
+        return; // clicked at top level item
+
     int id = item->data(0,Qt::UserRole).toInt();
-    if (item->data(0,Qt::UserRole+1) == Type_PickPlaceFile) {
-        // Pick&Place file
-        CentroidDialog dlg;
-        dlg.setCSV( m_Centroid.at(id) );
-        dlg.exec();
-        updateView();
+    Type type = (Type)item->data(0,Qt::UserRole+1).toInt();
+
+    QMenu menu;
+    menu.addAction( ui->actionRemove_File );
+    QAction* actionProperties = menu.addAction( tr("Properties") );
+    actionProperties->setEnabled( false );
+
+    if (type == Type_PickPlaceFile) {
+        actionProperties->setEnabled( true );
+    }
+
+    QAction* selected = menu.exec( ui->treeWidget->mapToGlobal(pos) );
+
+    if (selected == actionProperties) {
+        if (type == Type_PickPlaceFile) {
+            CentroidDialog dlg;
+            dlg.setCSV( m_Centroid.value(id) );
+            dlg.exec();
+            updateView();
+        }
     }
 }
 
@@ -393,10 +420,10 @@ void MainWindow::on_actionExport_to_Freecad_triggered()
 
 void MainWindow::render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness )
 {
-    if (num < 0 || num >= m_Centroid.size())
+    if (!m_Centroid.contains(num))
         return;
 
-    Centroid* centroid = m_Centroid.at(num);
+    Centroid* centroid = m_Centroid.value(num);
     QList<CentroidLine> lines = centroid->lines();
 
     for (int i=0; i<lines.size(); i++) {
@@ -423,4 +450,39 @@ void MainWindow::render_Centroid_into_Freecad_importItem( QTextStream& stream, C
     stream << "s.read(\"/home/sebastian/src/pickAndPlaceMachine/rs-online.com/STEP AP214/17433.stp\")" << endl;
     stream << "shapeobj.Shape = s" << endl;
     stream << "FreeCAD.activeDocument().recompute()" << endl;
+}
+
+void MainWindow::on_actionRemove_File_triggered()
+{
+    QTreeWidgetItem* item = ui->treeWidget->currentItem();
+    if (!item || !item->parent())
+        return;
+
+    int id = item->data(0,Qt::UserRole).toInt();
+    Type type = (Type)item->data(0,Qt::UserRole+1).toInt();
+
+    switch (type) {
+    case Type_PickPlaceFile:
+    {
+        item->parent()->removeChild(item);
+        m_Centroid.remove(id);
+        break;
+    }
+    case Type_GerberFile:
+    {
+        item->parent()->removeChild(item);
+        m_GerberImporter.remove(id);
+        break;
+    }
+    } // switch
+
+    updateView();
+}
+
+void MainWindow::on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous)
+{
+    if (!current || !current->parent())
+        ui->actionRemove_File->setEnabled( false );
+    else
+        ui->actionRemove_File->setEnabled( true );
 }
