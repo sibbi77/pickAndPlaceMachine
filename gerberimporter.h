@@ -205,7 +205,9 @@ public:
 
     bool import( QString filename );
     QList<Layer>& getLayers() {return m_layers;}
+
     QRectF getDimensionsF() const;
+    QPolygonF getOutlineF() const;
 
     static mpq_class mpq_from_decimal_string( QString decimal_str, bool *conversion_ok = 0, int *pos_after_number = 0 );
 

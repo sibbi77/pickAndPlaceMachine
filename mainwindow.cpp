@@ -35,6 +35,7 @@
 #include <vtkLinearExtrusionFilter.h>
 #include <vtkCellArray.h>
 #include <vtkTriangleFilter.h>
+#include <vtkCleanPolyData.h>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -155,15 +156,18 @@ static vtkSmartPointer<vtkActor> AddClosedPoly( QList<QPointF> coords, double th
     profile->SetPoints( points );
     profile->SetPolys( poly );
 
-    vtkSmartPointer<vtkTriangleFilter> tf = vtkSmartPointer<vtkTriangleFilter>::New();
-    tf->SetInput( profile );
+    vtkSmartPointer<vtkCleanPolyData> clean = vtkSmartPointer<vtkCleanPolyData>::New();
+    clean->SetInput( profile );
 
-    extrude->SetInput( tf->GetOutput() );
+    vtkSmartPointer<vtkTriangleFilter> tf = vtkSmartPointer<vtkTriangleFilter>::New();
+    tf->SetInputConnection( clean->GetOutputPort() );
+
+    extrude->SetInputConnection( tf->GetOutputPort() );
     extrude->SetExtrusionTypeToVectorExtrusion();
     extrude->SetVector( 0,0,thickness );
     extrude->CappingOn();
 
-    mapper->SetInput( extrude->GetOutput() );
+    mapper->SetInputConnection( extrude->GetOutputPort() );
     actor->SetMapper( mapper );
 
     return actor;
@@ -192,17 +196,20 @@ void MainWindow::updateView()
 
         // create 3D laminate
 
-//        QList<QPointF> outline = importer.getOutlineF();
         QList<QPointF> outline;
-        QRectF dimensions = importer.getDimensionsF(); // FIXME
-        outline << dimensions.bottomLeft(); // FIXME
-        outline << dimensions.bottomRight(); // FIXME
-        outline << dimensions.topRight(); // FIXME
-        outline << dimensions.topLeft(); // FIXME
-        vtkSmartPointer<vtkActor> actor2 = AddClosedPoly( outline, -m_laminateHeight );
-        actor2->GetProperty()->SetColor( 0, 0.9, 0 );
-        actor2->GetProperty()->SetOpacity( 0.4 );
-        m_vtkRenderer->AddViewProp( actor2 );
+        QPolygonF outline_poly = importer.getOutlineF();
+        outline = outline_poly.toList();
+//        QRectF dimensions = importer.getDimensionsF(); // FIXME
+//        outline << dimensions.bottomLeft(); // FIXME
+//        outline << dimensions.bottomRight(); // FIXME
+//        outline << dimensions.topRight(); // FIXME
+//        outline << dimensions.topLeft(); // FIXME
+        if (outline.size() >= 3) {
+            vtkSmartPointer<vtkActor> actor2 = AddClosedPoly( outline, -m_laminateHeight );
+            actor2->GetProperty()->SetColor( 0, 0.9, 0 );
+            actor2->GetProperty()->SetOpacity( 0.4 );
+            m_vtkRenderer->AddViewProp( actor2 );
+        }
     }
 
     for (int i=0; i<m_layerTop->childCount(); i++) {
@@ -336,6 +343,7 @@ void MainWindow::on_actionZoom_Out_triggered()
 {
     if (ui->tabWidget->currentIndex() == 0) {
         // 3D view activated
+        m_vtkRenderer->GetActiveCamera();
     } else {
         // 2D view activated
         ui->graphicsView->scale( 0.5, 0.5 );
@@ -346,12 +354,10 @@ void MainWindow::on_actionZoom_Fit_triggered()
 {
     if (ui->tabWidget->currentIndex() == 0) {
         // 3D view activated
+        m_vtkRenderer->ResetCamera();
+        ui->qvtkWidget->GetRenderWindow()->Render();
     } else {
         // 2D view activated
-//        qDebug() << m_scene->itemsBoundingRect();
-//        qDebug() << m_scene->sceneRect();
-//        qDebug() << ui->graphicsView->sceneRect();
-//        qDebug() << ui->graphicsView->visibleRegion();
         ui->graphicsView->fitInView( m_scene->itemsBoundingRect(), Qt::KeepAspectRatio );
     }
 }

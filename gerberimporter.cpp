@@ -584,6 +584,48 @@ QRectF GerberImporter::getDimensionsF() const
     return rect;
 }
 
+//! \brief Bounding polygon.
+//! Iterates over all information layers and merges all (FilledOutline- and Line-) objects into the resulting outline polygon.
+//! Does currently not respect layer attributes (cutout, inverse, ...).
+//! \todo think about using curves in addition to lines.
+QPolygonF GerberImporter::getOutlineF() const
+{
+    QPolygonF poly;
+    foreach( Layer layer, m_layers ) {
+        QList<QPointF> points;
+        QList<Object*> objects = layer.getObjects();
+        foreach (Object* object, objects) {
+            QGraphicsItem* item = object->getGraphicsItem();
+            QGraphicsPolygonItem* item2 = dynamic_cast<QGraphicsPolygonItem*>(item);
+            if (item2) {
+                poly = poly.united( item2->polygon() );
+            }
+            QGraphicsLineItem* item3 = dynamic_cast<QGraphicsLineItem*>(item);
+            if (item3) {
+                QPointF start = item3->line().p1();
+                QPointF stop  = item3->line().p2();
+                if (points.size() == 0) {
+                    // start new polygon
+                    points << start << stop;
+                } else if (points.last() != start) {
+                    // new polygon inside this layer
+                    poly = poly.united( QPolygonF(points.toVector()) );
+                    points.clear();
+                    points << start << stop;
+                } else {
+                    // add point to current polygon
+                    points << stop;
+                }
+            }
+        }
+        if (!points.isEmpty()) {
+            poly = poly.united( QPolygonF(points.toVector()) );
+            points.clear();
+        }
+    }
+    return poly;
+}
+
 
 
 
