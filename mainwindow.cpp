@@ -192,7 +192,7 @@ void MainWindow::updateView()
     ui->graphicsView->update();
 
     // remove all actors from 3D scene
-    m_vtkRenderer->RemoveAllProps();
+    m_vtkRenderer->RemoveAllViewProps();
     m_vtkRenderer->ResetCamera();
     ui->qvtkWidget->GetRenderWindow()->Render();
 

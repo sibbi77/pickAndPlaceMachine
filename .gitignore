@@ -1,7 +1,10 @@
 *.o
-Makefile
+Makefile*
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
 *.autosave
 *.pro.user
+debug/
+release/
+object_script.*
