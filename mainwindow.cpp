@@ -56,16 +56,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // setup tree view
     ui->treeWidget->setHeaderLabels( QStringList("Layer") );
-    m_layerOutline = new QTreeWidgetItem(QStringList("Outline"));
-    ui->treeWidget->addTopLevelItem( m_layerOutline );
-    m_layerTop = new QTreeWidgetItem(QStringList("Top"));
-    ui->treeWidget->addTopLevelItem( m_layerTop );
-    m_layerBottom = new QTreeWidgetItem(QStringList("Bottom"));
-    ui->treeWidget->addTopLevelItem( m_layerBottom );
-    m_csv = new QTreeWidgetItem(QStringList("Pick&Place"));
-    ui->treeWidget->addTopLevelItem( m_csv );
-    m_layerUnknown = new QTreeWidgetItem(QStringList("Unknown"));
-    ui->treeWidget->addTopLevelItem( m_layerUnknown );
+    m_treeLayerOutline = new QTreeWidgetItem(QStringList("Outline"));
+    ui->treeWidget->addTopLevelItem( m_treeLayerOutline );
+    m_treeLayerTop = new QTreeWidgetItem(QStringList("Top"));
+    ui->treeWidget->addTopLevelItem( m_treeLayerTop );
+    m_treeLayerBottom = new QTreeWidgetItem(QStringList("Bottom"));
+    ui->treeWidget->addTopLevelItem( m_treeLayerBottom );
+    m_treeCentroid = new QTreeWidgetItem(QStringList("Pick&Place"));
+    ui->treeWidget->addTopLevelItem( m_treeCentroid );
+    m_treeExcellon = new QTreeWidgetItem(QStringList("Excellon"));
+    ui->treeWidget->addTopLevelItem( m_treeExcellon );
+    m_treeUnknown = new QTreeWidgetItem(QStringList("Unknown"));
+    ui->treeWidget->addTopLevelItem( m_treeUnknown );
 
     // setup defaults
     m_laminateHeight = 1.6; // 1.6 mm
@@ -81,70 +83,30 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::on_actionImport_Gerber_triggered()
+void MainWindow::on_actionImport_triggered()
 {
-    QString filename = QFileDialog::getOpenFileName( this, "Select a file to import" );
-    if (filename.isEmpty())
+    QStringList filenames = QFileDialog::getOpenFileNames( this, "Select files to import" );
+    if (filenames.isEmpty())
         return;
 
-    QFileInfo fi(filename);
-    QTreeWidgetItem* item = new QTreeWidgetItem();
-    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
-    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+    foreach( QString filename, filenames ) {
+        QFileInfo fi(filename);
 
-    if ((fi.suffix().toLower() == "csv") || (fi.suffix().toLower() == "mnt")) {
-        // most likely Pick&Place file
-        Centroid* centroid = new Centroid;
-        bool ok = centroid->analyze( filename );
-        if (!ok) {
-            // automatic column determination failed; let the user assign the colunms
-            CentroidDialog dlg;
-            dlg.setCSV( centroid );
-            dlg.exec();
+        if ((fi.suffix().toLower() == "csv") || (fi.suffix().toLower() == "mnt")) {
+            // most likely Pick&Place file
+            import_Centroid( filename );
+        } else if (fi.suffix().toLower() == "drd") {
+            // most likely Excellon file
+            import_Excellon( filename );
+        } else if (!import_Gerber( filename )) {
+            // unkown file format
+            QTreeWidgetItem* item = new QTreeWidgetItem();
+            item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
+            item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+            m_treeUnknown->addChild(item);
         }
-
-        QList<int> keys = m_Centroid.keys();
-        int id = 0;
-        if (!keys.isEmpty()) {
-            qSort(keys);
-            id = keys.last()+1;
-        }
-        m_Centroid[id] = centroid;
-        item->setData( 0, Qt::UserRole, id );
-        item->setData( 0, Qt::UserRole+1, Type_PickPlaceFile ); // Pick&Place file
-        item->setData( 0, Qt::UserRole+2, filename );
-
-        m_csv->addChild(item);
-        updateView();
-        return;
     }
 
-    GerberImporter importer;
-    bool ok = importer.import( filename );
-    if (!ok)
-        return;
-
-    QList<int> keys = m_GerberImporter.keys();
-    int id = 0;
-    if (!keys.isEmpty()) {
-        qSort(keys);
-        id = keys.last()+1;
-    }
-    m_GerberImporter[id] = importer;
-    item->setData( 0, Qt::UserRole, id );
-    item->setData( 0, Qt::UserRole+1, Type_GerberFile ); // Gerber file
-
-    if (fi.suffix().toLower() == "outline") {
-        m_layerOutline->addChild(item);
-    } else if ((fi.suffix().toLower() == "top") || (fi.suffix().toLower() == "positop") || (fi.suffix().toLower() == "cmp")) {
-        m_layerTop->addChild(item);
-    } else if ((fi.suffix().toLower() == "bot") || (fi.suffix().toLower() == "posibot") || (fi.suffix().toLower() == "sol")) {
-        m_layerBottom->addChild(item);
-    } else {
-        m_layerUnknown->addChild(item);
-    }
-
-    //render( importer );
     updateView();
 }
 
@@ -196,11 +158,11 @@ void MainWindow::updateView()
     m_vtkRenderer->ResetCamera();
     ui->qvtkWidget->GetRenderWindow()->Render();
 
-    if (m_layerOutline->childCount() > 0) {
-        if (m_layerOutline->childCount() > 1)
+    if (m_treeLayerOutline->childCount() > 0) {
+        if (m_treeLayerOutline->childCount() > 1)
             qDebug() << "currently only one outline supported";
 
-        int id = m_layerOutline->child(0)->data(0,Qt::UserRole).toInt();
+        int id = m_treeLayerOutline->child(0)->data(0,Qt::UserRole).toInt();
         GerberImporter& importer = m_GerberImporter[id];
 
         // create 2D outline
@@ -219,20 +181,20 @@ void MainWindow::updateView()
         }
     }
 
-    for (int i=0; i<m_layerTop->childCount(); i++) {
-        int id = m_layerTop->child(i)->data(0,Qt::UserRole).toInt();
+    for (int i=0; i<m_treeLayerTop->childCount(); i++) {
+        int id = m_treeLayerTop->child(i)->data(0,Qt::UserRole).toInt();
         GerberImporter& importer = m_GerberImporter[id];
         render( importer, 0, m_metalThickness );
     }
 
-    for (int i=0; i<m_layerBottom->childCount(); i++) {
-        int id = m_layerBottom->child(i)->data(0,Qt::UserRole).toInt();
+    for (int i=0; i<m_treeLayerBottom->childCount(); i++) {
+        int id = m_treeLayerBottom->child(i)->data(0,Qt::UserRole).toInt();
         GerberImporter& importer = m_GerberImporter[id];
         render( importer, -m_laminateHeight - m_metalThickness, m_metalThickness );
     }
 
-    for (int i=0; i<m_csv->childCount(); i++) {
-        int id = m_csv->child(i)->data(0,Qt::UserRole).toInt();
+    for (int i=0; i<m_treeCentroid->childCount(); i++) {
+        int id = m_treeCentroid->child(i)->data(0,Qt::UserRole).toInt();
         render_Centroid( id, 0, -m_laminateHeight, m_metalThickness );
     }
 
@@ -412,8 +374,8 @@ void MainWindow::on_actionExport_to_Freecad_triggered()
     stream << "from FreeCAD import Base" << endl;
     stream << endl;
 
-    for (int i=0; i<m_csv->childCount(); i++) {
-        render_Centroid_into_Freecad( stream, m_csv->child(i)->data(0,Qt::UserRole).toInt(), 0, -m_laminateHeight, m_metalThickness );
+    for (int i=0; i<m_treeCentroid->childCount(); i++) {
+        render_Centroid_into_Freecad( stream, m_treeCentroid->child(i)->data(0,Qt::UserRole).toInt(), 0, -m_laminateHeight, m_metalThickness );
     }
 
 }
@@ -485,4 +447,119 @@ void MainWindow::on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTre
         ui->actionRemove_File->setEnabled( false );
     else
         ui->actionRemove_File->setEnabled( true );
+}
+
+void MainWindow::on_actionImportGerber_triggered()
+{
+    QStringList filenames = QFileDialog::getOpenFileNames( this, "Select a Gerber file to import" );
+    if (filenames.isEmpty())
+        return;
+    foreach( QString filename, filenames )
+        import_Gerber( filename );
+    updateView();
+}
+
+void MainWindow::on_actionImportCentroid_triggered()
+{
+    QStringList filenames = QFileDialog::getOpenFileNames( this, "Select a Centroid file to import", "", "Centroid files (*.csv);;All files (*.*)" );
+    if (filenames.isEmpty())
+        return;
+    foreach( QString filename, filenames )
+        import_Centroid( filename );
+    updateView();
+}
+
+void MainWindow::on_actionImportExcellon_triggered()
+{
+    QStringList filenames = QFileDialog::getOpenFileNames( this, "Select an Excellon file to import", "", "Excellon files (*.drd);;All files (*.*)" );
+    if (filenames.isEmpty())
+        return;
+    foreach( QString filename, filenames )
+        import_Excellon( filename );
+    updateView();
+}
+
+bool MainWindow::import_Centroid( QString filename )
+{
+    QFileInfo fi(filename);
+    QTreeWidgetItem* item = new QTreeWidgetItem();
+    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
+    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+
+    Centroid* centroid = new Centroid;
+    bool ok = centroid->analyze( filename );
+    if (!ok) {
+        // automatic column determination failed; let the user assign the colunms
+        CentroidDialog dlg;
+        dlg.setCSV( centroid );
+        dlg.exec();
+    }
+
+    QList<int> keys = m_Centroid.keys();
+    int id = 0;
+    if (!keys.isEmpty()) {
+        qSort(keys);
+        id = keys.last()+1;
+    }
+    m_Centroid[id] = centroid;
+    item->setData( 0, Qt::UserRole, id );
+    item->setData( 0, Qt::UserRole+1, Type_PickPlaceFile ); // Pick&Place file
+    item->setData( 0, Qt::UserRole+2, filename );
+
+    m_treeCentroid->addChild(item);
+    return true;
+}
+
+bool MainWindow::import_Excellon( QString filename )
+{
+    QFileInfo fi(filename);
+    QTreeWidgetItem* item = new QTreeWidgetItem();
+    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
+    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+
+    int id = 0;
+
+    item->setData( 0, Qt::UserRole, id );
+    item->setData( 0, Qt::UserRole+1, Type_ExcellonFile ); // Excellon file
+    item->setData( 0, Qt::UserRole+2, filename );
+
+    m_treeExcellon->addChild(item);
+    return true;
+}
+
+bool MainWindow::import_Gerber( QString filename )
+{
+    QFileInfo fi(filename);
+    QTreeWidgetItem* item = new QTreeWidgetItem();
+    item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
+    item->setToolTip( 0, QDir::toNativeSeparators(filename) );
+
+    if ((fi.suffix().toLower() == "outline") || (fi.suffix().toLower() == "dim")) {
+        m_treeLayerOutline->addChild(item);
+    } else if ((fi.suffix().toLower() == "top") || (fi.suffix().toLower() == "positop") || (fi.suffix().toLower() == "cmp")) {
+        m_treeLayerTop->addChild(item);
+    } else if ((fi.suffix().toLower() == "bot") || (fi.suffix().toLower() == "posibot") || (fi.suffix().toLower() == "sol")) {
+        m_treeLayerBottom->addChild(item);
+    } else {
+        return false;
+    }
+
+    GerberImporter importer;
+    bool ok = importer.import( filename );
+    if (!ok) {
+        delete item;
+        return false;
+    }
+
+    QList<int> keys = m_GerberImporter.keys();
+    int id = 0;
+    if (!keys.isEmpty()) {
+        qSort(keys);
+        id = keys.last()+1;
+    }
+    m_GerberImporter[id] = importer;
+    item->setData( 0, Qt::UserRole, id );
+    item->setData( 0, Qt::UserRole+1, Type_GerberFile ); // Gerber file
+
+    return true;
 }

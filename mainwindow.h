@@ -22,7 +22,7 @@ public:
     ~MainWindow();
     
 private slots:
-    void on_actionImport_Gerber_triggered();
+    void on_actionImport_triggered();
 
     void on_treeWidget_customContextMenuRequested(const QPoint &pos);
 
@@ -38,18 +38,24 @@ private slots:
 
     void on_treeWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
 
+    void on_actionImportGerber_triggered();
+
+    void on_actionImportCentroid_triggered();
+
+    void on_actionImportExcellon_triggered();
+
 private:
     Ui::MainWindow *ui;
 
 protected:
-    enum Type {Type_GerberFile, Type_PickPlaceFile};
+    enum Type {Type_GerberFile, Type_PickPlaceFile, Type_ExcellonFile};
 
     QGraphicsScene* m_scene;
 
     vtkRenderer *m_vtkRenderer;
     QHash<int,GerberImporter> m_GerberImporter; //!< int: unique id (used in treeWidget) to refer to a GerberImporter
     QHash<int,Centroid*> m_Centroid; //!< int: unique id (used in treeWidget) to refer to a Centroid file
-    QTreeWidgetItem *m_layerOutline, *m_layerTop, *m_layerBottom, *m_csv, *m_layerUnknown;
+    QTreeWidgetItem *m_treeLayerOutline, *m_treeLayerTop, *m_treeLayerBottom, *m_treeCentroid, *m_treeExcellon, *m_treeUnknown;
 
     double m_laminateHeight, m_metalThickness;
 
@@ -60,6 +66,9 @@ protected:
     void render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad_importItem( QTextStream& stream, CentroidLine line, double zpos_top, double zpos_bottom, double thickness );
+    bool import_Centroid( QString filename );
+    bool import_Excellon( QString filename );
+    bool import_Gerber( QString filename );
 };
 
 #endif // MAINWINDOW_H
