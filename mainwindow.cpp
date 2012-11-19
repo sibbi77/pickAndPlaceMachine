@@ -198,6 +198,11 @@ void MainWindow::updateView()
         render_Centroid( id, 0, -m_laminateHeight, m_metalThickness );
     }
 
+    for (int i=0; i<m_treeExcellon->childCount(); i++) {
+        int id = m_treeExcellon->child(i)->data(0,Qt::UserRole).toInt();
+        render_Excellon( id, 0, -m_laminateHeight, m_metalThickness );
+    }
+
     // rescale 2D view
     ui->graphicsView->fitInView( m_scene->itemsBoundingRect(), Qt::KeepAspectRatio );
 
@@ -277,6 +282,51 @@ void MainWindow::render_Centroid( int num, double zpos_top, double zpos_bottom, 
         QRectF r;
         r.setSize( QSizeF(1,1) );
         r.moveCenter( QPointF(line.x.get_d(),line.y.get_d()) );
+        QGraphicsEllipseItem *item = new QGraphicsEllipseItem(r);
+        item->setPen( QPen("red") );
+        item->setBrush( QBrush("red") );
+        group->addToGroup( item );
+    }
+
+    m_scene->addItem( group );
+}
+
+void MainWindow::render_Excellon( int num, double zpos_top, double zpos_bottom, double thickness )
+{
+    if (!m_Excellon.contains(num))
+        return;
+
+    ExcellonImporter* excellon = m_Excellon.value(num);
+    QList<Drill> drills = excellon->drills();
+
+    //
+    // draw 2D
+    //
+
+    QGraphicsItemGroup* group = new QGraphicsItemGroup;
+    group->setData(0,Type_ExcellonFile);
+    group->setData(1,num);
+
+    // delete previous rendering
+    QList<QGraphicsItem*> items = m_scene->items();
+    QMutableListIterator<QGraphicsItem*> it(items);
+    while (it.hasNext()) {
+        QGraphicsItem* item = it.next();
+        if (item && !item->data(0).isNull() && (item->data(0).toInt() == Type_ExcellonFile) && (item->data(1).toInt() == num)) {
+            delete item;
+            break;
+        }
+    }
+
+    for (int i=0; i<drills.size(); i++) {
+        Drill drill = drills.at(i);
+
+        QRectF r;
+        mpq_class d = drill.diameter() * 1000; // convert to mm
+        mpq_class x = drill.x() * 1000; // convert to mm
+        mpq_class y = drill.y() * 1000; // convert to mm
+        r.setSize( QSizeF(d.get_d(),d.get_d()) );
+        r.moveCenter( QPointF(x.get_d(),y.get_d()) );
         QGraphicsEllipseItem *item = new QGraphicsEllipseItem(r);
         item->setPen( QPen("red") );
         item->setBrush( QBrush("red") );
@@ -430,6 +480,12 @@ void MainWindow::on_actionRemove_File_triggered()
         m_Centroid.remove(id);
         break;
     }
+    case Type_ExcellonFile:
+    {
+        item->parent()->removeChild(item);
+        m_Excellon.remove(id);
+        break;
+    }
     case Type_GerberFile:
     {
         item->parent()->removeChild(item);
@@ -517,8 +573,16 @@ bool MainWindow::import_Excellon( QString filename )
     item->setText( 0, QDir::toNativeSeparators(fi.fileName()) );
     item->setToolTip( 0, QDir::toNativeSeparators(filename) );
 
-    int id = 0;
+    ExcellonImporter* excellon = new ExcellonImporter;
+    bool ok = excellon->import( filename );
 
+    QList<int> keys = m_Excellon.keys();
+    int id = 0;
+    if (!keys.isEmpty()) {
+        qSort(keys);
+        id = keys.last()+1;
+    }
+    m_Excellon[id] = excellon;
     item->setData( 0, Qt::UserRole, id );
     item->setData( 0, Qt::UserRole+1, Type_ExcellonFile ); // Excellon file
     item->setData( 0, Qt::UserRole+2, filename );

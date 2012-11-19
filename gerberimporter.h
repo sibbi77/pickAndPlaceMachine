@@ -213,8 +213,6 @@ public:
     QRectF getDimensionsF() const;
     QPolygonF getOutlineF() const;
 
-    static mpq_class mpq_from_decimal_string( QString decimal_str, bool *conversion_ok = 0, int *pos_after_number = 0 );
-
 protected:
     bool processDataBlock( QString dataBlock );
     void processParameterBlock( QString parameterBlock, bool finished );

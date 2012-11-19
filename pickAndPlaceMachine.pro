@@ -38,7 +38,8 @@ SOURCES += main.cpp\
     centroid.cpp \
     centroiddialog.cpp \
     graphicsview.cpp \
-    excellonimporter.cpp
+    excellonimporter.cpp \
+    utils.cpp
 
 HEADERS  += mainwindow.h \
     gerberimporter.h \
@@ -46,7 +47,8 @@ HEADERS  += mainwindow.h \
     centroid.h \
     centroiddialog.h \
     graphicsview.h \
-    excellonimporter.h
+    excellonimporter.h \
+    utils.h
 
 FORMS    += mainwindow.ui \
     centroiddialog.ui

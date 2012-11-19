@@ -8,6 +8,7 @@
 
 #include "gerberimporter.h"
 #include "centroid.h"
+#include "excellonimporter.h"
 
 namespace Ui {
 class MainWindow;
@@ -55,6 +56,7 @@ protected:
     vtkRenderer *m_vtkRenderer;
     QHash<int,GerberImporter> m_GerberImporter; //!< int: unique id (used in treeWidget) to refer to a GerberImporter
     QHash<int,Centroid*> m_Centroid; //!< int: unique id (used in treeWidget) to refer to a Centroid file
+    QHash<int,ExcellonImporter*> m_Excellon; //!< int: unique id (used in treeWidget) to refer to an Excellon file
     QTreeWidgetItem *m_treeLayerOutline, *m_treeLayerTop, *m_treeLayerBottom, *m_treeCentroid, *m_treeExcellon, *m_treeUnknown;
 
     double m_laminateHeight, m_metalThickness;
@@ -64,6 +66,7 @@ protected:
     void render_2D( GerberImporter& importer );
     void render_3D( GerberImporter& importer, double zpos, double thickness );
     void render_Centroid( int num, double zpos_top, double zpos_bottom, double thickness );
+    void render_Excellon( int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad( QTextStream& stream, int num, double zpos_top, double zpos_bottom, double thickness );
     void render_Centroid_into_Freecad_importItem( QTextStream& stream, CentroidLine line, double zpos_top, double zpos_bottom, double thickness );
     bool import_Centroid( QString filename );
