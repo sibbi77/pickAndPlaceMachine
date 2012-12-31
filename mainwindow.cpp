@@ -32,10 +32,19 @@
 #include <vtkProperty.h>
 #include <vtkPolygon.h>
 #include <vtkTransformPolyDataFilter.h>
+#include <vtkTransform.h>
 #include <vtkLinearExtrusionFilter.h>
 #include <vtkCellArray.h>
 #include <vtkTriangleFilter.h>
 #include <vtkCleanPolyData.h>
+#include <vtkCylinderSource.h>
+#include <vtkPolyDataNormals.h>
+
+#if ((VTK_MAJOR_VERSION>5) || (VTK_MAJOR_VERSION==5 && VTK_MINOR_VERSION>=10))
+#define HAVE_BOOLEANPOLYFILTER
+#include "vtkBooleanOperationPolyDataFilter.h"
+#endif
+
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -73,6 +82,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_laminateHeight = 1.6; // 1.6 mm
     m_metalThickness = 35e-3; // metal thickness 35 um
 
+//    QTimer::singleShot( 0, this, SLOT(test()) );
 }
 
 MainWindow::~MainWindow()
@@ -81,6 +91,13 @@ MainWindow::~MainWindow()
     m_Centroid.clear();
     delete m_scene;
     delete ui;
+}
+
+void MainWindow::test()
+{
+    import_Excellon( "/home/sebastian/src/pickAndPlaceMachine/examples/LPC_4TE_3.43controller.drd" );
+    import_Gerber( "/home/sebastian/src/pickAndPlaceMachine/examples/LPC_4TE_3.43controller.outline" );
+    updateView();
 }
 
 void MainWindow::on_actionImport_triggered()
@@ -334,6 +351,79 @@ void MainWindow::render_Excellon( int num, double zpos_top, double zpos_bottom, 
     }
 
     m_scene->addItem( group );
+
+
+    //
+    // draw 3D
+    //
+
+    // we currently assume the PCB (extruded Gerber outline) is the only actor present
+
+#ifdef HAVE_BOOLEANPOLYFILTER
+    vtkActorCollection* actors = m_vtkRenderer->GetActors();
+    //qDebug() << "Number of Actors:" << actors->GetNumberOfItems();
+    if (actors->GetNumberOfItems() >= 1) {
+        vtkSmartPointer<vtkBooleanOperationPolyDataFilter> filter = vtkSmartPointer<vtkBooleanOperationPolyDataFilter>::New();
+        actors->InitTraversal();
+        vtkActor* actor = actors->GetNextActor(); // this is the PCB
+        vtkMapper* mapper = actor->GetMapper();
+        vtkDataSet* dataSet = mapper->GetInput();
+        vtkPolyData* polyData = dynamic_cast<vtkPolyData*>(dataSet); // this is the PCB as polygonal data
+        if (polyData) {
+            // create normal vectors for PCB
+            vtkSmartPointer<vtkPolyDataNormals> polyDataNormals = vtkSmartPointer<vtkPolyDataNormals>::New();
+            polyDataNormals->SetInput( polyData );
+            // triangulate PCB
+            vtkSmartPointer<vtkTriangleFilter> triangleFilter2 = vtkSmartPointer<vtkTriangleFilter>::New();
+            triangleFilter2->SetInput( polyDataNormals->GetOutput() );
+            // copy result into polyData
+            triangleFilter2->Update();
+            polyData->DeepCopy( triangleFilter2->GetOutput() );
+
+            filter->SetOperationToDifference();
+
+            for (int i=0; i<drills.size(); i++) {
+                qDebug() << "Drill" << i+1 << "of" << drills.size();
+                Drill drill = drills.at(i);
+                mpq_class r = drill.diameter() * 1000 / 2; // convert to mm
+                mpq_class x = drill.x() * 1000; // convert to mm
+                mpq_class y = drill.y() * 1000; // convert to mm
+
+                filter->SetInput( 0, polyData );
+                // create drill at correct position
+                vtkSmartPointer<vtkCylinderSource> cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
+                cylinderSource->SetHeight( zpos_top - zpos_bottom + 2*thickness );
+                cylinderSource->SetRadius( r.get_d() );
+                cylinderSource->SetResolution( 10 ); // FIXME
+                vtkSmartPointer<vtkTransformPolyDataFilter> transformPolyDataFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+                transformPolyDataFilter->SetInputConnection( cylinderSource->GetOutputPort() );
+                vtkSmartPointer<vtkTransform> t = vtkSmartPointer<vtkTransform>::New();
+                t->RotateX(90); // orient cylinder along z-axis
+                t->PostMultiply();
+                t->Translate( x.get_d(), y.get_d(), (zpos_top + zpos_bottom) / 2.0 );
+                transformPolyDataFilter->SetTransform(t);
+                // triangulate drill
+                vtkSmartPointer<vtkTriangleFilter> triangleFilter1 = vtkSmartPointer<vtkTriangleFilter>::New();
+                triangleFilter1->SetInputConnection( transformPolyDataFilter->GetOutputPort() );
+                // calculate difference (drill into PCB)
+                filter->SetInputConnection( 1, triangleFilter1->GetOutputPort() );
+                filter->Update(); // execute filter
+                // get the result and store it into polyData
+                polyData->DeepCopy( filter->GetOutput() );
+            }
+
+            vtkSmartPointer<vtkPolyDataMapper> m = vtkSmartPointer<vtkPolyDataMapper>::New();
+            m->SetInputConnection( filter->GetOutputPort() );
+            vtkSmartPointer<vtkActor> a = vtkSmartPointer<vtkActor>::New();
+            a->SetMapper( m );
+            m_vtkRenderer->AddActor(a);
+            m_vtkRenderer->RemoveActor(actor);
+        }
+    }
+#else
+#warning DISABLED Excellon 3D rendering. VTK too old. Need at least VTK-5.10.
+#endif
+
 }
 
 void MainWindow::on_treeWidget_customContextMenuRequested(const QPoint &pos)

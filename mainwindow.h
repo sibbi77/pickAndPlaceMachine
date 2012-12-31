@@ -72,6 +72,9 @@ protected:
     bool import_Centroid( QString filename );
     bool import_Excellon( QString filename );
     bool import_Gerber( QString filename );
+
+protected slots:
+    void test();
 };
 
 #endif // MAINWINDOW_H
