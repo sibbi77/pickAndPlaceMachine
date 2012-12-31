@@ -60,6 +60,7 @@ protected:
     QTreeWidgetItem *m_treeLayerOutline, *m_treeLayerTop, *m_treeLayerBottom, *m_treeCentroid, *m_treeExcellon, *m_treeUnknown;
 
     double m_laminateHeight, m_metalThickness;
+    QColor m_laminateColor;
 
     void updateView();
     void render( GerberImporter& importer, double zpos, double thickness );

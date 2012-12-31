@@ -39,6 +39,7 @@
 #include <vtkCleanPolyData.h>
 #include <vtkCylinderSource.h>
 #include <vtkPolyDataNormals.h>
+#include <vtkAppendPolyData.h>
 
 #if ((VTK_MAJOR_VERSION>5) || (VTK_MAJOR_VERSION==5 && VTK_MINOR_VERSION>=10))
 #define HAVE_BOOLEANPOLYFILTER
@@ -80,6 +81,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // setup defaults
     m_laminateHeight = 1.6; // 1.6 mm
+    m_laminateColor = QColor("green");
     m_metalThickness = 35e-3; // metal thickness 35 um
 
 //    QTimer::singleShot( 0, this, SLOT(test()) );
@@ -192,7 +194,7 @@ void MainWindow::updateView()
         outline = outline_poly.toList();
         if (outline.size() >= 3) {
             vtkSmartPointer<vtkActor> actor2 = AddClosedPoly( outline, -m_laminateHeight );
-            actor2->GetProperty()->SetColor( 0, 0.9, 0 );
+            actor2->GetProperty()->SetColor( m_laminateColor.redF(), m_laminateColor.greenF(), m_laminateColor.blueF() );
             actor2->GetProperty()->SetOpacity( 0.4 );
             m_vtkRenderer->AddViewProp( actor2 );
         }
@@ -380,16 +382,15 @@ void MainWindow::render_Excellon( int num, double zpos_top, double zpos_bottom, 
             triangleFilter2->Update();
             polyData->DeepCopy( triangleFilter2->GetOutput() );
 
-            filter->SetOperationToDifference();
+            vtkSmartPointer<vtkAppendPolyData> appendPolyData = vtkSmartPointer<vtkAppendPolyData>::New();
 
+            // create drills
             for (int i=0; i<drills.size(); i++) {
-                qDebug() << "Drill" << i+1 << "of" << drills.size();
                 Drill drill = drills.at(i);
                 mpq_class r = drill.diameter() * 1000 / 2; // convert to mm
                 mpq_class x = drill.x() * 1000; // convert to mm
                 mpq_class y = drill.y() * 1000; // convert to mm
 
-                filter->SetInput( 0, polyData );
                 // create drill at correct position
                 vtkSmartPointer<vtkCylinderSource> cylinderSource = vtkSmartPointer<vtkCylinderSource>::New();
                 cylinderSource->SetHeight( zpos_top - zpos_bottom + 2*thickness );
@@ -402,22 +403,27 @@ void MainWindow::render_Excellon( int num, double zpos_top, double zpos_bottom, 
                 t->PostMultiply();
                 t->Translate( x.get_d(), y.get_d(), (zpos_top + zpos_bottom) / 2.0 );
                 transformPolyDataFilter->SetTransform(t);
-                // triangulate drill
-                vtkSmartPointer<vtkTriangleFilter> triangleFilter1 = vtkSmartPointer<vtkTriangleFilter>::New();
-                triangleFilter1->SetInputConnection( transformPolyDataFilter->GetOutputPort() );
-                // calculate difference (drill into PCB)
-                filter->SetInputConnection( 1, triangleFilter1->GetOutputPort() );
-                filter->Update(); // execute filter
-                // get the result and store it into polyData
-                polyData->DeepCopy( filter->GetOutput() );
+
+                appendPolyData->AddInput( transformPolyDataFilter->GetOutput() );
             }
+
+            // triangulate drills
+            vtkSmartPointer<vtkTriangleFilter> triangleFilter1 = vtkSmartPointer<vtkTriangleFilter>::New();
+            triangleFilter1->SetInputConnection( appendPolyData->GetOutputPort() );
+
+            // calculate difference (drill into PCB)
+            filter->SetOperationToDifference();
+            filter->SetInput( 0, polyData );
+            filter->SetInputConnection( 1, triangleFilter1->GetOutputPort() );
 
             vtkSmartPointer<vtkPolyDataMapper> m = vtkSmartPointer<vtkPolyDataMapper>::New();
             m->SetInputConnection( filter->GetOutputPort() );
+            m->ScalarVisibilityOff();
             vtkSmartPointer<vtkActor> a = vtkSmartPointer<vtkActor>::New();
             a->SetMapper( m );
-            m_vtkRenderer->AddActor(a);
+            a->GetProperty()->SetColor( m_laminateColor.redF(), m_laminateColor.greenF(), m_laminateColor.blueF() );
             m_vtkRenderer->RemoveActor(actor);
+            m_vtkRenderer->AddActor(a);
         }
     }
 #else
