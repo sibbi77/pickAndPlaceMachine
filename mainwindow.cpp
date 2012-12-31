@@ -705,6 +705,7 @@ bool MainWindow::import_Gerber( QString filename )
     }
 
     GerberImporter importer;
+    importer.setLogWidget( ui->log );
     bool ok = importer.import( filename );
     if (!ok) {
         delete item;

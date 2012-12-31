@@ -20,6 +20,7 @@
 
 #include <QtCore>
 #include <QtGui>
+#include <QPlainTextEdit>
 #include <cmath>
 
 #include <vtkCubeSource.h>
@@ -49,6 +50,8 @@ GerberImporter::GerberImporter()
     m_FS_decimals10 = 0;
     m_FS_zero = omit_leading;
     m_MO = in;
+
+    m_logWidget = 0;
 }
 
 bool GerberImporter::import( QString filename )
@@ -56,9 +59,13 @@ bool GerberImporter::import( QString filename )
     if (filename.isEmpty())
         return false;
 
+    log( "importing \"" + filename + "\"." );
+
     QFile file( filename );
-    if (!file.open(QFile::ReadOnly))
+    if (!file.open(QFile::ReadOnly)) {
+        log( "cannot open file." );
         return false;
+    }
 
     QTextStream stream(&file);
     QString line;
@@ -106,9 +113,10 @@ bool GerberImporter::processDataBlock( QString dataBlock )
 
     if (dataBlock.left(3) == "M02")
         return false; // end of file
-    else if (dataBlock.left(3) == "G04")
-        qDebug() << "Comment:" << dataBlock.mid(3,dataBlock.length()-4);
-    else if (dataBlock.left(3) == "G01")
+    else if (dataBlock.left(3) == "G04") {
+//        qDebug() << "Comment:" << dataBlock.mid(3,dataBlock.length()-4);
+        log( "Comment: " + dataBlock.mid(3,dataBlock.length()-4) );
+    } else if (dataBlock.left(3) == "G01")
         drawG01( dataBlock );
     else if (dataBlock.left(3) == "G02")
         drawG02( dataBlock );
@@ -157,7 +165,8 @@ void GerberImporter::processParameterBlock( QString parameterBlock, bool finishe
     parameterBlock = parameterBlock.toUpper();
 
     if (m_deprecated_parameters.contains(parameterBlock.left(2))) {
-        qDebug() << "deprecated Parameter. IGNORING.";
+//        qDebug() << "deprecated Parameter. IGNORING.";
+        log( "deprecated Parameter " + parameterBlock.left(2) + ". IGNORING." );
         return;
     }
 
@@ -183,7 +192,8 @@ void GerberImporter::parameterFS( QString parameterBlock )
 {
     if (m_FS_integer != -1) {
         // only one times allowed
-        qDebug() << "FS specified multiple times";
+//        qDebug() << "FS specified multiple times";
+        log( "FS specified multiple times" );
         return;
     }
     int pos=2;
@@ -194,26 +204,31 @@ void GerberImporter::parameterFS( QString parameterBlock )
         m_FS_zero = omit_trailing;
         pos++;
     } else {
-        qDebug() << "FS error; neither omit leading zeros nor omit trailing zeros specified. Defaulting to omit leading zeros.";
+//        qDebug() << "FS error; neither omit leading zeros nor omit trailing zeros specified. Defaulting to omit leading zeros.";
+        log( "FS error; neither omit leading zeros nor omit trailing zeros specified. Defaulting to omit leading zeros." );
         m_FS_zero = omit_leading;
 //        return;
     }
     if (parameterBlock.mid(pos,1) == "A")
         ;
     else if (parameterBlock.mid(pos,1) == "I") {
-        qDebug() << "FS I unsupported";
+//        qDebug() << "FS I unsupported";
+        log( "FS I unsupported" );
         return;
     } else {
-        qDebug() << "FS error";
+//        qDebug() << "FS error";
+        log( "FS error" );
         return;
     }
     pos++;
     if (parameterBlock.mid(pos,1) == "N") {
-        qDebug() << "FS N unsupported";
+//        qDebug() << "FS N unsupported";
+        log( "FS N unsupported" );
         pos += 2;
     }
     if (parameterBlock.mid(pos,1) == "G") {
-        qDebug() << "FS G unsupported";
+//        qDebug() << "FS G unsupported";
+        log( "FS G unsupported" );
         pos += 2;
     }
     if (parameterBlock.mid(pos,1) == "X") {
@@ -228,24 +243,28 @@ void GerberImporter::parameterFS( QString parameterBlock )
         }
         pos++;
     } else {
-        qDebug() << "FS error";
+//        qDebug() << "FS error";
+        log( "FS error" );
         return;
     }
     if (parameterBlock.mid(pos,1) == "Y") {
         bool ok;
         int temp = parameterBlock.mid(++pos,1).toInt(&ok);
         if (!ok || (m_FS_integer != temp)) {
-            qDebug() << "FS Y error";
+//            qDebug() << "FS Y error";
+            log( "FS Y error" );
             return;
         }
         temp = parameterBlock.mid(++pos,1).toInt(&ok);
         if (!ok || (m_FS_decimals != temp)) {
-            qDebug() << "FS Y error";
+//            qDebug() << "FS Y error";
+            log( "FS Y error" );
             return;
         }
         pos++;
     } else {
-        qDebug() << "FS error";
+//        qDebug() << "FS error";
+        log( "FS error" );
         return;
     }
 }
@@ -258,7 +277,8 @@ void GerberImporter::parameterMO( QString parameterBlock )
     else if (parameterBlock.mid(2,2) == "IN")
         m_MO = in;
     else {
-        qDebug() << "MO error";
+//        qDebug() << "MO error";
+        log( "MO error" );
         return;
     }
 }
@@ -267,7 +287,8 @@ void GerberImporter::parameterMO( QString parameterBlock )
 void GerberImporter::parameterLN( QString parameterBlock )
 {
     newLayer().setName( parameterBlock.mid(2,parameterBlock.length()-3) );
-    qDebug() << "The layer's name is:" << newLayer().name();
+//    qDebug() << "The layer's name is:" << newLayer().name();
+    log( "The layer's name is: " + newLayer().name() );
 }
 
 //! \brief Define an aperture.
@@ -282,7 +303,8 @@ void GerberImporter::parameterAD( QString parameterBlock )
     bool ok;
     int num = num_str.toInt(&ok);
     if (!ok || (num<10) || (num>999)) {
-        qDebug() << "invalid aperture definition";
+//        qDebug() << "invalid aperture definition";
+        log( "invalid aperture definition" );
         return;
     }
 
@@ -331,7 +353,8 @@ void GerberImporter::parameterAD( QString parameterBlock )
         QString macroName = aperture_str.left(idx);
         if (!m_apertureMacros.contains(macroName)) {
             // cannot use this aperture; macro invalid
-            qDebug() << "AD command: cannot use macro" << macroName;
+//            qDebug() << "AD command: cannot use macro" << macroName;
+            log( "AD command: cannot use macro " + macroName );
             return;
         }
         aperture.setMacro( m_apertureMacros[macroName], arguments );
@@ -355,7 +378,8 @@ void GerberImporter::parameterAM( QString collect_parameter_AM )
     // extract macro name
     int idx = collect_parameter_AM.indexOf('*');
     if (idx == -1) {
-        qDebug() << "invalid macro";
+//        qDebug() << "invalid macro";
+        log( "invalid macro" );
         return;
     }
     QString macroName = collect_parameter_AM.mid(2,idx-2);
@@ -486,19 +510,22 @@ void GerberImporter::setDCode( QString dataBlock )
             currentLayer().setDrawMode( Layer::off );
         else if (temp == 3)
             currentLayer().setDrawMode( Layer::flash );
-        else if (temp < 10)
-            qDebug() << "Invalid D Code.";
-        else
+        else if (temp < 10) {
+//            qDebug() << "Invalid D Code.";
+            log( "Invalid D Code." );
+        } else
             currentLayer().setAperture( temp );
     } else {
-        qDebug() << "Error in D Code.";
+//        qDebug() << "Error in D Code.";
+        log( "Error in D Code." );
     }
 }
 
 mpq_class GerberImporter::makeCoordinate( QString str )
 {
     if (str.isEmpty()) {
-        qDebug() << "makeCoordinate(): not a valid coordinate: <empty>";
+//        qDebug() << "makeCoordinate(): not a valid coordinate: <empty>";
+        log( "makeCoordinate(): not a valid coordinate: <empty>" );
         return 0;
     }
 
@@ -512,14 +539,16 @@ mpq_class GerberImporter::makeCoordinate( QString str )
         if (m_FS_zero == omit_trailing)
             str.append( QString(num - digit_length,'0') );
     } else if (digit_length > num) {
-        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+//        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+        log( "makeCoordinate(): not a valid coordinate: " + str );
         return 0;
     }
 
     bool ok;
     int temp = str.toInt(&ok);
     if (!ok) {
-        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+//        qDebug() << "makeCoordinate(): not a valid coordinate:" << str;
+        log( "makeCoordinate(): not a valid coordinate: " + str );
         return 0;
     }
 
@@ -586,9 +615,17 @@ QPolygonF GerberImporter::getOutlineF() const
     return poly;
 }
 
+void GerberImporter::setLogWidget( QPlainTextEdit* widget )
+{
+    m_logWidget = widget;
+}
 
-
-
+void GerberImporter::log( QString msg )
+{
+    if (m_logWidget) {
+        m_logWidget->appendPlainText( "GerberImporter: " + msg );
+    }
+}
 
 
 

@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <gmpxx.h>
 #include <QGraphicsItem>
+#include <QPlainTextEdit>
 
 #include <vtkAssembly.h>
 #include <vtkSmartPointer.h>
@@ -213,6 +214,8 @@ public:
     QRectF getDimensionsF() const;
     QPolygonF getOutlineF() const;
 
+    void setLogWidget( QPlainTextEdit* widget );
+
 protected:
     bool processDataBlock( QString dataBlock );
     void processParameterBlock( QString parameterBlock, bool finished );
@@ -229,6 +232,7 @@ protected:
     void startOutlineFill();
     void stopOutlineFill();
     mpq_class makeCoordinate( QString str );
+    void log( QString msg );
 
     Layer& newLayer();
     Layer& currentLayer();
@@ -238,6 +242,8 @@ protected:
     QList<Layer> m_layers;
     QHash<int,Aperture> m_apertures; //!< global defined apertures; available to all layers
     QHash<QString,ApertureMacro> m_apertureMacros;
+
+    QPlainTextEdit* m_logWidget;
 
     // current graphics state
     int m_FS_integer, m_FS_decimals, m_FS_decimals10;
