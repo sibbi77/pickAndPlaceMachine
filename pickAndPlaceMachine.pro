@@ -19,11 +19,17 @@ TEMPLATE = app
 
 QMAKE_CXXFLAGS_DEBUG = "-ggdb -O0 -Wall -Wextra"
 
+unix:VTK_INCLUDEPATH = /usr/include/vtk-5.8
+win32:VTK_INCLUDEPATH = c:/dev/projects/openems-w32/vtk/include/vtk-5.10
+win32:VTK_LIBS = -Lc:/dev/projects/openems-w32/vtk/bin
+
+exists(custom.pri):include(custom.pri)
+
 # vtk
-unix:INCLUDEPATH += /usr/include/vtk-5.8
-win32:INCLUDEPATH += c:/dev/projects/openems-w32/vtk/include/vtk-5.10
-win32:LIBS += -Lc:/dev/projects/openems-w32/vtk/bin
-LIBS += -lQVTK -lvtkCommon -lvtkRendering -lvtkGraphics -lvtkFiltering -lvtkGenericFiltering
+INCLUDEPATH += $$VTK_INCLUDEPATH
+LIBS += $$VTK_LIBS
+LIBS += -lQVTK -lvtkGenericFiltering -lvtkRendering -lvtkGraphics -lvtkFiltering -lvtkIO -lvtkCommon -lvtksys
+LIBS += -lvtktiff -lvtkjpeg -lvtkpng -lvtkzlib -lvtkexpat -lGL
 
 # gmp
 win32:INCLUDEPATH += c:/dev/projects/gmp-bin/include
@@ -55,3 +61,6 @@ FORMS    += mainwindow.ui \
 
 RESOURCES += \
     pickAndPlaceMachine.qrc
+
+OTHER_FILES += \
+    custom.pri
